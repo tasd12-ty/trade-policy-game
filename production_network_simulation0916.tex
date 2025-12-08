@@ -1,0 +1,255 @@
+\documentclass{article}
+\usepackage{ctex}
+\usepackage{amsmath, amssymb, graphicx}
+
+\title{全球生产网络、两国和双产业链政策博弈模拟}
+\author{}
+\date{Jul 2025}
+
+\begin{document}
+
+\maketitle
+\section{Main Idea}
+\paragraph{模型环境}  将中、美嵌入到全球生产网络中, 每个国家主导某些产业或者依赖其他国家产业
+\begin{itemize}
+    \item 聚焦两条核心的产业链：即高端芯片制造和稀土产业链
+    \item 美国主导高端芯片产业链的研发和设计上游环节，中国主导稀土的挖掘、提纯和开采的上游环节
+    \item 各个国家基于自己主导的优势产业进行贸易政策（或产业政策）的选择，以最大化政策目标函数
+\end{itemize}
+\paragraph{政策目标}
+本研究可以考虑多重政策目标下的博弈结果和福利效应
+\begin{itemize}
+    \item 各国最大化自己国家的产出
+    \item 各国最大化消费者的福利水平
+    \item 各国追求相对产出水平
+    \item 各国追求高科技、高附加值产业的优势地位
+\end{itemize}
+\section{Setup}
+\subsection{产业、生产网络}
+每个国家$l\in\{1,2\}$内有$N_l$个行业，每个行业$i$中的代表性厂商的生产函数为
+\begin{equation}
+\begin{aligned}
+Y_i=&G_i(A_i,X_{i1},\dots,X_{iM_l};X^I_{i,M_l+1},X^O_{M_l+1},\dots,;X^I_{i,N_l},X^O_{N_l};L_{i1},\dots,L_{iM})\\=&A_i\prod_{j=1}^{M_l} X_{ij}^{\alpha_{ij}}\prod_{j=M_l+1}^{N_l}\left(\left(\gamma_{ij}X_{ij}^I\right)^{\rho_{ij}}+\left((1-\gamma_{ij})X_{ij}^O\right)^{\rho_{ij}}\right)^\frac{\alpha_{ij}}{\rho_{ij}}\prod_{k=1}^{M} L_{ik}^{\alpha_{i,N+k}}
+\end{aligned}
+\end{equation} 其中，$L_{ik}$ 表示部门$i$的对要素k的使用量，对于$j=1,\dots,M_l$，这些部门为纯本土化部门，即只有l国具有这些行业部门，$X_{ij}$表示部门$i$生产过程中使用的部门$j$的产品，$\alpha_{ij}$为生产函数中的技术参数，对于$j=M_l+1,\dots,N_l$，两国都存在这些行业部门，给定部门i可以选择使用两国的产品j作为原材料，$X_{ij}^I$和$X_{ij}^O$分别表示行业i使用国内部门j的产品和国外部门j的产品作为原材料的用量，国内外共有部门j的产品之间存在一定的替代，因此使用嵌套CES生产函数，$\rho_{ij}$表示行业i在使用部门j的产品时对国内外竞品的替代弹性。
+
+部门i成本函数为：
+\begin{equation}
+    M_i=\sum_{j=1}^{M_l} P_jX_{ij}+\sum_{j=M_l+1}^{N_l} (P_j^IX^I_{ij}+P_j^OX_{ij}^O)+\sum_{k=1}^M P_{k+N}L_{ik}
+\end{equation} 其中$P_j$为$j$产品/要素的价格，在$j=M_l+1,\dots,N_l$这些国内外共有的部门中，$P_j^I$和$P_j^O$分别表示国内产品和国外竞品的价格。
+
+一个代表性消费者的效用函数为
+\begin{equation}
+    U=\prod_{j=1}^{M_l} \left(\frac{C_j}{\beta_j}\right)^{\beta_j}\prod_{j=M_l+1}^{N_l}\left((\gamma_{cj}C_j^I)^{\rho_{cj}}+((1-\gamma_{cj})C_j^O)^{\rho_{cj}}\right)^{\frac{\beta_j}{\rho_{cj}}}
+\end{equation}
+消费者的收入为
+\begin{equation}\label{income}
+    \mathcal{I}=\sum_{k=1}^MP_{i,N+k}L_k^D
+\end{equation} 其中，
+\begin{equation}
+    L_k^D=\sum_{i=1}^{N_l}L_{ik}
+\end{equation} 表示个行业部门对要素$k$的实际使用量。
+
+对于给定的i以及$j=M_l+1,\dots,N_l$，记$(X_{t;i1},\dots,X_{t;iM_l},X_{t;i,M_l+1}^I,X_{t;i,M_l+1}^O,\\\dots,X_{t;iN_l}^I,X_{t;iN_l}^O,L_{t;i1},\dots,L{t;iM})$为行业i在当前时期t对于中间品和要素的使用量
+\begin{equation}
+\theta_{t;ij}=\frac{\left(\gamma_{ij}X_{t;ij}^I\right)^{\rho_{ij}}}{\left(\gamma_{ij}X_{t;ij}^I\right)^{\rho_{ij}}+\left((1-\gamma_{ij})X_{t;ij}^O\right)^{\rho_{ij}}}
+\end{equation} 为根据当前t时期的国内外竞品用量计算的行业i对产品j的国内外竞品的使用比例，记$Y_{t;i}$为使用上述t时期给定的中间品和要素用量生产出的部门i的产出量，以及
+\begin{equation}\label{lambda}
+\begin{aligned}
+\lambda_{t;i}=&A_i^{-1}\prod_{j=1}^{M_l}\left(\frac{\alpha_{ij}}{P_{t;j}}\right)^{-\alpha_{ij}}\prod_{j=M_l+1}^{N_l}\left(\left(\frac{\alpha_{ij}\gamma_{ij}\theta_{t;ij}}{P_{t;j}^I}\right)^{\rho_{ij}}+\left(\frac{\alpha_{ij}(1-\gamma_{ij})(1-\theta_{t;ij})}{P_{t;j}^O}\right)^{\rho_{ij}}\right)^{-\frac{\alpha_{ij}}{\rho_{ij}}}\\&\times\prod_{j=1}^{M}\left(\frac{\alpha_{i,j+N_l}}{P_{t;j+N_l}}\right)^{-\alpha_{ij}}
+\end{aligned}
+\end{equation}
+则在面对针对价格、生产率或其他技术参数的冲击时，对于中间品及要素的使用需求的调整量可由如下形式表示
+\begin{equation}\label{adj1}
+    \Delta x_{D,ij}=\log X_{D,ij}-\log X_{t;ij}=\log \alpha_{ij}+\log \lambda_{t;i} -\log P_{t;j} +\log Y_t -\log X_{t;ij},\,\,j=1,\dots,M_l
+\end{equation}
+\begin{equation}\label{adj2}
+\begin{aligned}
+     \Delta x^I_{D,ij}=&\log X^I_{D,ij}-\log X^I_{t;ij}=\log \alpha_{ij}+\log \lambda_{t;i} +\log\theta_{t;ij}+\log Y_t
+     \\&-\log P^I_{t;j}  -\log X^I_{t;ij},\,\,j=M_l+1,\dots,N_l
+\end{aligned}
+\end{equation}
+\begin{equation}\label{adj3}
+\begin{aligned}
+      \Delta x^O_{D,ij}=&\log X^O_{D,ij}-\log X^I_{t;ij}=\log \alpha_{ij}+\log \lambda_{t;i} +\log(1-\theta_{t;ij})+\log Y_t\\&-\log P^O_{t;j}  -\log X^O_{t;ij},\,\,j=M_l+1,\dots,N_l
+\end{aligned}
+\end{equation} 
+\begin{equation}\label{adj4}
+    \Delta x_{D,i,N_L+j}=\log L_{D,ij}-\log L_{t;ij}=\log \alpha_{i,N_l+j}+\log \lambda_{t;i} -\log P_{t;N_l+j} +\log Y_t -\log L_{t;ij},\,\,j=1,\dots,M
+\end{equation} \eqref{adj1}-\eqref{adj4}记录了在当部门i从t到t+1期经历了价格、生产率或其他技术参数的冲击后，在维持部门产出不变和对国内外竞品使用比例不变的前提下，成本最小化驱动的中间品和要素使用量的变化量。在非出清市场环境下，对于中间品和要素的使用量的需求调整并不一定等于真实可实现的使用量调整，因此在\eqref{adj1}-\eqref{adj4}中加入下标$D$以指代该调整量仅为需求调整量。
+
+类似的，对于家庭部门和最终消费，记
+$(C_{t;1},\dots,C_{t;M_l},C_{t;M_l+1}^I,C_{t;M_l+1}^O,\\\dots,C_{t;N_l}^I,C_{t;N_l}^O)$为行业i在当前时期t对于各部门产品及国内外竞品的消费量
+\begin{equation}
+\theta_{t;cj}=\frac{\left(\gamma_{cj}C_{t;j}^I\right)^{\rho_{cj}}}{\left(\gamma_{cj}C_{t;j}^I\right)^{\rho_{cj}}+\left((1-\gamma_{cj})C_{t;j}^O\right)^{\rho_{cj}}}
+\end{equation} 为根据当前t时期的国内外竞品消费量计算的家庭部门对产品j的国内外竞品的消费比例，记$\mathcal{I}_{t}$为t时期家庭部门的要素收入水平，则对于家庭部门而言，在面临潜在的价格冲击时，若给定收入水平$\mathcal{I}_t$不变和面临国内外竞品的消费比例不变，则效用最大化下，家庭部门对各部门产品的消费需求调整量为
+\begin{equation}\label{Adj1}
+    \Delta c_{D,j}=\log C_{D,j}-\log C_{t;j}=\log \beta_{ij}+\log I_{t} -\log P_{t;j} -\log C_{t;j},\,\,j=1,\dots,M_l
+\end{equation}
+\begin{equation}\label{Adj2}
+\begin{aligned}
+     \Delta c^I_{D,j}=&\log C^I_{D,j}-\log C^I_{t;j}=\log \beta_{j}+\log I_{t} +\log\theta_{t;ij}-\log P^I_{t;j}  -\log C^I_{t;j},\,\,j=M_l+1,\dots,N_l
+\end{aligned}
+\end{equation}
+\begin{equation}\label{Adj3}
+\begin{aligned}
+      \Delta c^O_{D,j}=&\log C^O_{D,j}-\log C^I_{t;j}=\log \beta_{j}+\log \mathcal{I}_{t} +\log(1-\theta_{t;cj})-\log P^O_{t;j}  -\log C^O_{t;j},\,\,j=M_l+1,\dots,N_l
+\end{aligned}
+\end{equation} 
+
+
+
+
+记$$\Delta x_D=\{\{\Delta x_{D,i1},\dots,\Delta x_{D,iM_l},\Delta x^I_{D,i,M_l+1},\dots,\Delta x^I_{D,iN_l},\Delta x_{D,i,N_l+1},\\\dots,\Delta x_{D,i,N_l+M_l} \}:i=1,\dots,N_l\}$$为一个$N_l\times (N_l+M_l)$维的矩阵，刻画了全部$N_l$个行业对全部（国内生产的）中间品和要素的需求调整量。记$$X_t=\{\{X_{t;i1},\dots,X_{t;iM_l},X^I_{t;i,M_l+1},\dots,X^I_{t;iN_l},L_{t;i,1},\dots,L_{t;iM_l} \}:i=1,\dots,N_l\}$$为$N_l\times (N_l+M_l)$维矩阵，刻画了t时期各行业对国内生产的中间品和要素的实际使用量。
+
+对于国外竞品需求，记$$X_t^O=\{\{X_{t;i,M_l+1}^O,\dots,X_{t;iN_l}^O\}:i=1,\dots,N_l\}$$为$N_l\times(N_l-M_l)$维矩阵，刻画t时期各部门对国外竞品的实际使用量，$$\Delta x^O_D=\{\{\Delta x_{D,i,M_l+1}^O,\dots,\Delta x_{D,iN_l}^O\}:i=1,\dots,N_l\}$$为$N_l\times(N_l-M_l)$维矩阵，刻画t时期各部门对国外竞品的需求调整量。
+
+
+对消费者，记$$C_t=(C_{t;1},\dots,C_{t;M_l}, C^I_{t;M_l+1},\dots,C_{t;N_l}^I,0,\dots,0)^\top$$为$(N_L+M)\times 1$维列向量，刻画t时期家庭部门对国内部门产品的实际消费量，其中家庭部门不消费要素，故而要素需求恒为零；$$\Delta c_D=(\Delta c_{D;1},\dots,\Delta c_{D;M_l}, \\\Delta c^I_{D;M_l+1},\dots,\Delta c_{D;N_l}^I,0,\dots,0)^\top$$为$(N_l+M)\times 1$维列向量，刻画家庭部门对国内部门产品的消费需求的调整量。对于国外竞品需求，记$$C_t^O=(C_{t;M_l+1}^O,\dots,C_{t;N_l}^O)^\top$$为$(N_l-M_l)\times1$维列向量，刻画t时期家庭部门对国外竞品的实际需求量，$$\Delta C^O_D=(\Delta c_{D,M_l+1}^O,\dots,\Delta c_{D,N_l}^O)^\top$$为$(N_l-M_l)\times1$维列向量，刻画t时期家庭部门对国外竞品的需求调整量。
+
+
+% 记$X_t^O=\{\{X_{t;i,M_l+1}^O,\dots,X_{t;iN_l}^O\}:\,i=1,\dots,N_l\}$为一个$N_l\times(N_l-M_l)$维矩阵，刻画了t时期各行业对于国外竞品的中间品使用量，记$\Delta x_D^O=\{\{\Delta x_{D;i,M_l+1}^O,\dots,\Delta x_{D;iN_l}^O\}:\,i=1,\dots,N_l\}$为一个$N_l\times(N_l-M_l)$维矩阵，刻画了t时期各行业对于国外竞品的中间品需求的调整量。类似的，定义$C_t^O=(C_{t;M_l+1}^O,\dots,C_{t;N_l}^O)^\top$为一个$N_l-M_l$维列向量，刻画了家庭部门t时期对于国外竞品的消费量，$\Delta c_t^O=(\Delta c_{D;M_l+1}^O,\dots,\Delta c_{D;N_l}^O)^\top$为一个$N_l-M_l$维列向量，刻画了家庭部门t时期对于国外竞品的需求调整量。
+
+记$$p_{t;N_l}=(\ln P_{t;1},\dots,\ln P_{t;_l},\ln P^I_{t;M_l+1},\ln P^I_{t;N_l})^\top$$为$N_l\times1$维列向量，刻画国内$N_l$部门产品在t时期的价格的对数值，$$p_{t,l}=(\ln P_{t;1},\dots,\ln P_{t;N_l},\\\ln P^I_{t;M_l+1},\ln P^I_{t;N_l},\ln P_{t;N_l+1},\dots,\ln P_{t;N_l+M})^\top$$为$(N_l+M)\times1$维列向量，刻画t时期国内产品与要素的价格对数；$$p_{t}^O=(\ln P^O_{t;M_l+1},\dots,\ln P^O_{t;N_l})^\top$$为$(N_l-M_l)\times1$维列向量，刻画$N_l-M_l$种进口品在t时期的价格对数。
+
+记$$Y_t=(Y_{t;1},\dots,Y_{t;N_l},L_1,\dots,L_M)^\top$$为$(N_l+M)\times 1$维列向量，刻画t时期国内各部门的产出量以及各要素的存量，本文假设要素供给为非弹性供给，意味着要素存量为固定常熟，因此不依赖时间下标。另$$Export_t=(0,\dots,0,E_{t;M_l+1},\dots,E_{t;N_l},0,\dots,0)^\top$$为$(N_l+M)\times 1$维列向量，刻画t时期国外对于l国产品的需求量，由于行业$1,\dots,M_l$为非贸易行业，因此国外需求为0，本文假设要素均不可跨国流动，因此对要素的国外需求也为0。
+
+令产品市场和要素市场的供求缺口决定价格的变化量（记为$\Delta p_t=\ln P_{t+1}-\ln P_t$，具体形式如下：
+\begin{equation}\label{dp}
+    \Delta p_t=Diag(\tau)\left(\left(X_t^\top\circ \exp(\Delta x_D)^\top\right)\mathbf{1}_{N_l}+C\circ\exp(\Delta c_D)+Export_t-Y_t\right)
+\end{equation} 其中$A\circ B$表示矩阵$A$、$B$中元素逐点相乘得到的新矩阵，$\exp(A)$表示对$A$中每个元素取指数得到的新矩阵，$Diag$为将给定向量设为对角线元素的对角矩阵，$\tau$为$N_l+M$为全正向量，刻画价格调整相对于供求缺口的幅度。
+
+由于有供求缺口的存在，最终中间品、要素以及消费品的实际使用量与其计划需求量并不一致，当某类产品或要素供过于求时，实际使用量与计划量相一致，但会导致资源浪费，而当供不应求时，各部门和消费者的实际用量应当小于其计划量，具体用量本文假设为按需求比例方式进行分配，即
+\begin{equation}\label{drx}
+    \begin{aligned}
+        X_{t+1}=\left(\frac{\mathbf{1}_{N_l}Y_t^\top}{\mathbf{1}_{N_l}\left(\left(X_t^\top\circ\exp(\Delta x_D\right)^\top\mathbf{1}_N+C_t\circ\exp(\Delta c_D)\right)^\top+Export_t}\lor \mathbf{1}_{N_l\times(N_l+M)}\right)\circ\left(X_t\circ\exp(\Delta x_D)\right)
+    \end{aligned}
+\end{equation} 
+\begin{equation}\label{drc}
+     C_{t+1}=\left(\frac{Y_t}{\left(\left(X_t^\top\circ\exp(\Delta x_D\right)^\top\mathbf{1}_N+C_t\circ\exp(\Delta c_D)\right)+Export_t}\lor \mathbf{1}_{N+M}\right)\circ\left(C_t\circ\exp(\Delta c_D)\right)
+\end{equation} 其中，$A\lor B$代表由向量A、B逐点取最小值构成的新向量,$\frac{A}{B}$表示矩阵$A$、$B$逐点相除得到的新矩阵。
+
+出口需求方面，与\eqref{drc}类似，
+\begin{equation}\label{drE}
+     E_{t}=\left(\frac{Y_t}{\left(\left(X_t^\top\circ\exp(\Delta x_D\right)^\top\mathbf{1}_N+C_t\circ\exp(\Delta c_D)\right)+Export_t}\lor \mathbf{1}_{N+M}\right)\circ Export_t
+\end{equation} \eqref{drE}给出了实际的出口需求。
+
+为了平衡国际收支，记$EI_t=E_t^\top P_t$表示t时期的实际出口收入（$P_t=\exp(p_t)$刻画了t时期国内产品/要素价格），则购买国外竞品的指出与出口收入应保持一定的关系，从而利用与\eqref{drc}、\eqref{drx}类似的需求分配机制，可以决定对国外竞品的实际购买量，
+\begin{equation}\label{drxo}
+    X^O_{t+1}=\left(\frac{EI_t}{\mathbf{1}_{N_l}^\top \left(X^O_t\circ\exp(\Delta x_D^O)\right) \exp(P^O_{t})+\left(C^O_t\circ\exp(\Delta c_D^O)\right)^\top \exp(P^O_{t})}\lor 1\right)\left(X^O_t\circ\exp(\Delta x_D^O)\right) 
+\end{equation}
+\begin{equation}\label{drco}
+    C^O_{t+1}=\left(\frac{EI_t}{\mathbf{1}_{N_l}^\top \left(X^O_t\circ\exp(\Delta x_D^O)\right) \exp(p^O_{t})+\left(C^O_t\circ\exp(\Delta c_D^O)\right)^\top\exp( P^O_{t})}\lor 1\right)\left(C_t^O\circ\exp(\Delta c_D^O)\right)
+\end{equation} 
+
+
+一旦决定了各部门要素和中间品的实际使用量的变化量，各部门产出的变化量可由各部门生产函数决定，即
+\begin{equation}\label{dry}
+    Y_{t+1}=\left(G_1(A_1,X_{t+1;1,\cdot}),G_{N_l}(A_1,X_{t+1;N_l,\cdot});L_1,\dots,L_M\right)^\top
+    \end{equation}其中$X_{t+1;i,\cdot}$表示矩阵$X_t$的第i个行向量。
+
+而根据矩阵$X_{t+1}$中的最后$M$列刻画的要素实际需求，结合\eqref{income},可以给出家庭部门收入的更新方程
+\begin{equation}\label{dri}
+    \mathcal{I}_{t+1}=\mathbf{1}_{N_l}^\top X_{t+1;\cdot,N_l+1:N_l+M}\exp(p_t)_{N_l+1:N_l+M}
+\end{equation} 其中，$X_{t+1;\cdot,N_l+1:N_l+M}$表示$X_{t+1}$矩阵中有最后$M$列构成的子矩阵，$\exp(p_t)_{N_l+1:N_l+M}$表示由t时期价格向量$\exp(p_t)$最后M个元素构成的子向量。
+
+\subsection{算法执行}
+假设对于一国的决策者而言，每一期的出口向量$Export_t$、国外竞品的价格向量$p_t^O$均为外生参数；国内的产出$Y_t$、价格$p_t$、中间品/要素消耗$X_t$、国内品消费$C_t$、国外中间品使用$X_t^O$、国外竞品消费$C_t^O$、家庭部门收入（GDP）$\mathcal{I}_t$的动态演化分别由\eqref{dp}、\eqref{drx}、\eqref{drc}、\eqref{drxo}、\eqref{drco}、\eqref{dry}、\eqref{dri}中的迭代方程给出。
+
+在给定冲击（关税可以反应为初始时刻$p_t^O$价格向量的加成、配额对出口向量$Export_t$的manipulation）之后，迭代\eqref{dp}、\eqref{drx}、\eqref{drc}、\eqref{drxo}、\eqref{drco}、\eqref{dry}、\eqref{dri}，可以给出经济变量的动态演化轨迹。
+
+\subsection{拓展}
+假设中美两国的产业结构由l=1、2的上述两个动态生产网络模型刻画。拟在其中加入两条产业链的影响，以及中美两国进出口之间的直接效应。
+
+第一，产业链$s=1,2$可表示为一个包含$K_s$个节点的网络，记为$\mathcal{G}_s$，记$Node_{K_s}$为该网络的节点集合，记$Node_l$为l国生产网络的节点集合，则产业链网络中的节点集合必须与中美生产网络中的节点集合有非空交集，即$Node_{K_s}\cap Node_l\not=\emptyset$。
+第二，假设$\mathcal{G}_s$可以表示为一个取值{0，1}的邻接矩阵，其中$ij$元素取值为1当且仅当节点（代表一个国家行业组合）i与j之间存在相应的投入产出关联，并且如果$i,j\in Node_l$，ij在$\mathcal{G}_s$中无连边（即如果给定产业链与给定国家内的产业链重合，则不在国际产业链中考虑这种链接）。
+第三，如果对于$K_s$中的每个节点$i$，记$P_i$、$E_i$为两个节点属性变量，分别表示节点行业投入关键原材料的价格和数量。
+第四，对于每个$\mathcal{G}_s$，定义一个函数值邻接矩阵
+\begin{equation}
+    \mathcal{F}_{\mathcal{G}_s}=\left\{\mathcal{F}_{ij}:\,i,j\in K_s\right\}
+\end{equation} 其中$\mathcal{F}_{ij}:\mathbb{R}_+^2\rightarrow \mathbb{R}_+^2$的函数，满足如下条件：
+\begin{itemize}
+    \item $\mathcal{F}_{ij}\equiv(0,0)$在产业链网络$\mathcal{G}_s$中，ij间无连边。
+    \item 对于$i,j\in Node_{K_s}/(Node_{1}\cup Node_2)$令$(P_j^i,E_j^i)=\mathcal{F}_{ij}(P_i,E_i)$，则
+    $$(P_j,E_j)=\left(\frac{\sum_i P_j^i( P_j^iE_j^i)}{\sum_iP_j^iE_j^i},\sum_{i}E_j^i\right)$$
+    即下游节点j面临的投入品价格和投入数量有上游行业的销售均价和总产出量决定，而上游行业的产出数量和价格由其投入品数量、价格通过生产环境（由$\mathcal{F}_{ij}$刻画，其中还可以反映节点i面临的政策环境）转化得到。
+    \item 如果节点$i\in Node_l$而$j\not\in Node_l$，则$(P_i,E_i)$需与l过面临的产品i的给定产业链产品的进口价格和由前述生产网络模型决定的部门i在当前时期对给定产业链上的国外进口品需求相一致，记$(P_j^i,E_j^i)=\mathcal{F}_{ij}(P_i,E_i)$，则$P_j^i$等于l国部门i当前时期由生产网络模型决定的价格，同时$E^i$为有生产网络模型决定的当前时期l国部门i的实际出口量，$E_j^i=E^i \zeta_{ij}$，$\sum_j\zeta_{ij}=1$。
+    \item 如果节点$j\in Node_l$而$i\not\in Node_l$，记$(P_j^i,E_j^i)=\mathcal{F}_{ij}(P_i,E_i)$，则$P_j^i$等于l国部门j当前时期面临的给定产业链产品的进口价格，同时$E_j^i$与当前时期由前述生产网络模型决定的l国j部门对给定产业链产品的进口需求量相一致。
+\end{itemize}
+
+\subsection{平衡态定义}
+\begin{itemize}
+    \item 对于每个国家的每类产品$i$，\eqref{lambda}中的$\lambda_i$，满足
+\begin{equation}
+    \lambda_i=P_i
+\end{equation}
+\item 对于每个国家l的每类要素$j$，满足
+\begin{equation}\label{e0}
+    \sum_{i=1}^{N_l}\alpha_{i,N_l+j}P_iY_i=P_{N_l+j}L_j
+\end{equation}
+\item 对于每个国家l，\eqref{dp}等于0；
+\item 对于每个国家l，国际收支平衡
+\begin{equation}
+    \sum_{i=1}^{N_l}Export_i P_i=\mathbf{1}_{N_l}^\top X^O P^O+(C^O)^\top P^O
+\end{equation}
+\item \begin{equation}\label{e1}
+    P_jX_{ij}=\alpha_{ij}P_iY_i
+\end{equation}
+\item \begin{equation}\label{e2}
+    P_j^IX^I_{ij}=\alpha_{ij}\theta_{ij}P_iY_i
+\end{equation}
+\item \begin{equation}\label{e3}
+    P_j^OX^O_{ij}=\alpha_{ij}(1-\theta_{ij})P_iY_i
+\end{equation}
+\item 对于每个国家l，\eqref{dri}无下标成立。
+\item \begin{equation}\label{e4}
+    P_j^OC^O_{j}=\beta_{j}(1-\theta_{cj})\mathcal{I}
+\end{equation}
+\item \begin{equation}\label{e5}
+    P_j^IC^I_{j}=\beta_{j}\theta_{cj}\mathcal{I}
+\end{equation}
+\item \begin{equation}\label{e6}
+    P_jC_{j}=\beta_{j}\mathcal{I}
+\end{equation}
+\end{itemize}
+
+\subsection{$\rho_{ij}\equiv0$时的平衡态}
+$\rho_{ij}\equiv=0$时，$\theta_{ij}$均为常数，可以设
+\begin{equation}
+    \tilde{\alpha}_{ij}=\begin{cases}
+        \alpha_{ij}, & j=M_l+1,\dots,N_l,N_l+1,\dots,N_{l+k}\\
+        \alpha_{ij}\theta_{ij}, &j=1,\dots,M_l
+    \end{cases}
+\end{equation} 记$\tilde{\alpha}=(\tilde{\alpha}_{ij})_{1\leq i,j\leq N_l}$
+。平衡态下，记矩阵$\mathcal{B}=(I-\tilde{\alpha}^\top-\sum_{s=1}^k\beta\tilde\alpha_{N_l+k}^\top)^{-1}$，$\alpha_{N_l+k}=(\alpha_{1,N_l+k},\dots, \alpha_{N_L,N_l+k})^\top$
+\begin{equation}
+PY=\mathcal{B}\cdot PExport
+\end{equation} 其中，$PY=(P_1Y_1,\dots,P_{N_l}Y_{N_l})$、$PExport=(P_1Export_1,\dots,P_{N_l}Export_{N_l})$、。
+
+$\mathrm{p}=(p_1,\dots,p_{M_l},p^I_{M_l+1},\dots,p^I_{N_l})^\top$($p=\ln P$) 满足
+\begin{equation}
+    p=(I-\tilde{\alpha})^{-1}\left(\alpha^O p^O +\sum_{k=1}^{M}\alpha_{N_l+k}p_{N_l+k}-a-diag(\alpha^\top\alpha)\right)
+\end{equation} 其中，$p^O=(p^O_{M_l+1},\dots,p_{N_l}^O)^\top$，$a=(\ln A_1,\dots,\ln A_{N_l})^\top$, $$\alpha^O=\left(\begin{array}{ccc}
+    \alpha_{1,M_l+1}(1-\theta_{1,M_l+1}) &\dots& \alpha_{1,N_l}(1-\theta_{1,N_l}) \\
+    &\vdots &\\
+     \alpha_{N_l,M_l+1}(1-\theta_{N_l,M_l+1}) &\dots& \alpha_{N_l,N_l}(1-\theta_{N_l,N_l}) 
+\end{array}\right)$$, $\alpha=\{\tilde{\alpha}:\alpha^O:\alpha_{N_L+1},\dots,\alpha_{N_l+M}\}$。
+
+\begin{equation}
+    (P_{N_l+1},\dots,P_{N_l+M})^\top =\left(\begin{array}{c}
+        \alpha_{N_l+1}^\top/L_1 \\
+        \vdots\\
+         \alpha_{N_l+M}^\top/L_M
+    \end{array} \right) PY
+\end{equation}
+
+\begin{equation}
+    \mathcal{I}=\sum_{k=1}^M P_{N_l+k}L_k=\mathbf{1}_m^\top\left(\begin{array}{c}
+        \alpha_{N_l+1}^\top \\
+        \vdots\\
+         \alpha_{N_l+M}^\top
+    \end{array} \right) PY
+\end{equation}
+在此基础上，利用\eqref{e1}-\eqref{e6}确定中间品使用情况和消费向量
+
+\end{document}

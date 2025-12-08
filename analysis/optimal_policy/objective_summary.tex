@@ -1,0 +1,79 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{geometry}
+\usepackage{listings}
+\geometry{margin=1in}
+
+\title{两国多部门政策优化目标函数（公式与代码对应）}
+\author{eco-model / analysis}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{决策变量与映射}
+选定 $K$ 个部门（默认取可贸易部门的前若干个），构造决策向量
+\[
+    x = \big[m_1,\dots,m_K,\ \tau_1,\dots,\tau_K\big].
+\]
+\begin{itemize}
+    \item 出口管制乘子 $m_k \in [0,1]$（越小出口越紧），映射为 $\texttt{export\_controls}[i_k] = m_k$。
+    \item 进口关税 $\tau_k \in [0,\tau_{\max}]$（默认 $\tau_{\max}=1$），映射为 $\texttt{import\_tariffs}[i_k] = \tau_k$。
+\end{itemize}
+代码对应：\verb|decision_vector_for_sectors| 给出模板 $x_0$ 与部门索引，\verb|apply_per_sector_from_x| 将 $x$ 裁剪到合法区间后生成上述字典。
+
+\section{基线与仿真流程}
+\begin{enumerate}
+    \item 基线：\verb|build_baseline| 生成无政策仿真，得到首期指标 $(P_0, I_0, TB_0, IM_0)$，并记录长度 $H$ 的历史。
+    \item 复制基线仿真器（可先运行 \texttt{burn\_in} 步），依次施加
+    \begin{itemize}
+        \item 固定策略：\verb|fixed_export_controls|，\verb|fixed_import_tariffs|;
+        \item 当前决策：\verb|export_controls|，\verb|import_tariffs|（由 $x$ 得到）。
+    \end{itemize}
+    \item 运行 $H$ 期，得到目标国的时间序列 $\{P_t, I_t, TB_t\}_{t=0}^H$。
+\end{enumerate}
+出口乘子直接缩放基础出口；关税提高进口对偶价格，改变 Armington 份额与需求，从而影响价格、收入与贸易差。
+
+\section{指标构造}
+设评估期为 $t=1,\dots,T$（若 $H=0$ 则退化为 $t=0$）。
+\begin{align*}
+    z_{\text{price}}^{\text{avg}} &= -\operatorname{std}\!\left(\frac{P_t}{P_0}\right), &
+    z_{\text{price}}^{\text{term}} &= -\left(\frac{P_T}{P_0}-1\right)\cdot \texttt{price\_scale}, \\
+    z_{\text{income}} &= \operatorname{mean}\!\left(\frac{I_t}{I_0}-1\right), &
+    z_{\text{trade}} &= \frac{\operatorname{mean}(TB_t)}{\text{denom}},\quad
+    \text{denom} = \begin{cases}
+        |TB_0|, & |TB_0|> \varepsilon,\\
+        \max(IM_0,\varepsilon), & \text{否则}.
+    \end{cases}
+\end{align*}
+其中 \texttt{price\_scale} 默认 $10{,}000$，$\varepsilon=10^{-9}$。价格分量取负号表示“波动越小越好”。
+
+\section{目标函数}
+给定权重向量 $w=(w_1,w_2,w_3)$（默认全 1），归一化
+$\tilde{w} = 3\,w / \sum_j w_j$，则
+\[
+    J(x) = \frac{1}{3}\Big(\tilde{w}_1\, z_{\text{price}} + \tilde{w}_2\, z_{\text{income}} + \tilde{w}_3\, z_{\text{trade}}\Big).
+\]
+若 \verb|aggregate="average"| 则使用 $z^{\text{avg}}_{\text{price}}$，否则使用末期 $z^{\text{term}}_{\text{price}}$；收入与贸易分量的选择方式类似。
+
+\section{核心实现片段}
+\begin{lstlisting}[basicstyle=\ttfamily\small]
+# x -> policy maps
+exp_map, tar_map = apply_per_sector_from_x(base, x, sector_idxs, tau_max=1.0)
+
+# evaluate J
+J, comps = evaluate_objective(
+    baseline,
+    actor="H",
+    export_controls=exp_map,
+    import_tariffs=tar_map,
+    aggregate="average",  # or "terminal"
+    weights=(1.0, 1.0, 1.0),
+    burn_in=0,
+    price_scale=10_000.0,
+)
+\end{lstlisting}
+优化器（\verb|spsa| 或 \verb|pgd_fd|）将上式封装为黑箱 $f(x)=J(x)$，在盒约束内迭代寻找最优 $x$。
+
+\end{document}
