@@ -29,9 +29,11 @@ def main():
     exports = np.array([0.5, 0.5, 0.5, 0.0])
     imp_price = np.array([1.0, 1.1, 1.2])
     L = np.array([10.0])
+    gamma_cons = np.array([1.0, 0.6, 0.5])
 
     result = solve_equilibrium_rho0(
         alpha, gamma, beta, A, exports, imp_price, L, Ml, M,
+        gamma_cons=gamma_cons,
     )
 
     print(f"\n部门数: {Nl}, 非贸易部门: {Ml}, 要素: {M}")

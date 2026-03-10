@@ -19,11 +19,6 @@ def safe_log(x: np.ndarray | float) -> np.ndarray:
     return np.log(np.clip(np.asarray(x, dtype=float), EPS, None))
 
 
-def safe_exp(x: np.ndarray | float, max_abs: float = 20.0) -> np.ndarray:
-    """安全指数：截断极端值后取 exp，防止上溢。"""
-    return np.exp(np.clip(np.asarray(x, dtype=float), -max_abs, max_abs))
-
-
 def clamp_positive(x: np.ndarray | float, min_value: float = EPS) -> np.ndarray:
     """截断到正区间 [min_value, +∞)。"""
     return np.clip(np.asarray(x, dtype=float), min_value, None)

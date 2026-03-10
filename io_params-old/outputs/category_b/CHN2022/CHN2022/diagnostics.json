@@ -1,0 +1,6 @@
+{
+  "requested_price_mode": "exogenous",
+  "price_mode_used": "exogenous",
+  "solver_info": null,
+  "fallback_reason": null
+}

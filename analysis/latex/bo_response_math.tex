@@ -1,0 +1,84 @@
+\documentclass{ctexart}
+\usepackage[fontset=none]{ctex}
+\setCJKmainfont[AutoFakeBold=true, AutoFakeSlant=true]{AR PL UMing CN}
+\setCJKsansfont[AutoFakeBold=true, AutoFakeSlant=true]{AR PL UKai CN}
+\setCJKmonofont[AutoFakeBold=true, AutoFakeSlant=true]{AR PL UKai CN}
+
+\usepackage{amsmath, amssymb}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\title{单次最优回应：问题方程（仅表述，不含求解算法）}
+\author{Eco-Model Analysis}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section*{决策变量（以 H 国为例）}
+选定可贸易部门集合 $\mathcal{S}=\{j_1,\dots,j_K\}$，定义：
+\[
+m \in [0,1]^K \quad (\text{出口乘子}), \qquad
+\tau \in [0,\bar{\tau}]^K \quad (\text{关税率}).
+\]
+组合决策向量
+\[
+x = \begin{bmatrix} m \\ \tau \end{bmatrix} \in \mathbb{R}^{2K},\quad
+\ell = \begin{bmatrix} 0 \\ 0 \end{bmatrix},\quad
+u = \begin{bmatrix} \mathbf{1} \\ \bar{\tau}\,\mathbf{1} \end{bmatrix}.
+\]
+
+\section*{触发 / 环境（对手策略固定）}
+对手触发（或既定策略）：$\bar{m}^{\,\text{opp}}_j,\,\bar{\tau}^{\,\text{opp}}_j$；自身初始触发：$\bar{m}^{\,\text{self}}_j,\,\bar{\tau}^{\,\text{self}}_j$。
+
+应用时，自身决策覆盖自身触发：
+\[
+m^{\text{applied}}_j =
+\begin{cases}
+m_i & j=j_i\in\mathcal{S},\\
+\bar{m}^{\,\text{self}}_j & \text{否则},
+\end{cases}
+\quad
+\tau^{\text{applied}}_j =
+\begin{cases}
+\tau_i & j=j_i\in\mathcal{S},\\
+\bar{\tau}^{\,\text{self}}_j & \text{否则}.
+\end{cases}
+\]
+对手的触发保持固定。
+
+\section*{仿真映射}
+先 burn-in $B$ 期（无新增政策）让价格/产出贴近动态稳态。施加 $(m^{\text{applied}}, \tau^{\text{applied}})$ 与对手策略，运行 $T$ 期动态仿真，得到 $\{P_t, I_t, TB_t\}_{t=0}^{T}$。
+
+\section*{目标函数}
+定义评估期内的归一化指标（$H$ 为窗口长度）：
+\begin{align*}
+    \hat{I}_{\text{self}} &= \frac{1}{H}\sum_{t=1}^H \left(\frac{I_t}{I_0} - 1\right) & (\text{收入增长}) \\
+    \widehat{TB}_{\text{self}} &= \frac{1}{H}\sum_{t=1}^H \frac{TB_t}{S_{\text{scale}}} & (\text{贸易差额}) \\
+    \hat{\sigma}_{P, \text{self}} &= - \operatorname{std}\left(\frac{P_t}{P_0}\right) & (\text{价格稳定，负波动})
+\end{align*}
+同理定义对手指标 $\hat{I}_{\text{opp}}$ 等。
+
+\subsection*{A. 标准目标 (Standard / Self-Interest)}
+仅关注自身福利最大化。
+\[
+J_{\text{std}} = w_1 \cdot \hat{I}_{\text{self}} + w_2 \cdot \widehat{TB}_{\text{self}} + w_3 \cdot \hat{\sigma}_{P, \text{self}}
+\]
+其中默认权重 $w=(1, 1, 1)$。
+
+\subsection*{B. 改进目标-1：相对收益 (Relative / Competitive)}
+将对手的情况纳入考量，追求某种“零和”优势。
+\[
+J_{\text{rel}} = w_1 \cdot (\hat{I}_{\text{self}} - \hat{I}_{\text{opp}}) + w_2 \cdot (\widehat{TB}_{\text{self}} - \widehat{TB}_{\text{opp}}) + w_3 \cdot \hat{\sigma}_{P, \text{self}}
+\]
+注：制造让对手价格波动的策略不知道怎么设。
+
+\subsection*{C. 改进目标-2：对等反制 (Reciprocal Constraint)}
+目标函数仍为 $J_{\text{std}}$（或 $J_{\text{rel}}$），但决策变量 $x$ 的\textbf{搜索空间}受到对手上一轮行动 $x_{\text{opp}}^{t-1}$ 的限制。
+设反制系数为 $A$。若对手在上一轮对我方征收关税 $tax_1$，则我方在本轮的关税搜索下界强制为 $A \cdot tax_1$：
+\[
+\tau_{\text{self}}^{t} \in [A \cdot \tau_{\text{opp}}^{t-1}, \tau_{\max}]
+\]
+其中 $A$ 默认取 1.0（至少“以眼还眼”），可取 $A>1$ 实现“更强反击”，或 $A<1$ 表示“弱化反制”。换言之，一旦对手加税到 $tax_1$，我方搜索最优解时就从 $A \cdot tax_1$ 起步，不再考虑低于该水平的关税。
+
+\end{document}

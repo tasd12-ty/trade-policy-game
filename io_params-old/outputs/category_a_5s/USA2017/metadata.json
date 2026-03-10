@@ -1,0 +1,18 @@
+{
+  "country": "USA",
+  "year": 2017,
+  "data_root": "中美投入产出表数据（附表格阅读说明）",
+  "total_csv": "中美投入产出表数据（附表格阅读说明）/美国/OECD美国投入产出数据/投入产出，行业-行业，total口径/USA2017ttl.csv",
+  "domestic_csv": "中美投入产出表数据（附表格阅读说明）/美国/OECD美国投入产出数据/投入产出（含进口行），行业-行业，Domestic口径/USA2017dom.csv",
+  "consumption_columns": [
+    "HFCE"
+  ],
+  "theta_ij_fill_on_zero_total": null,
+  "theta_cj_fill_on_zero_total": null,
+  "notes": {
+    "alpha_ij": "alpha_ij = Z_total[j,i] / OUTPUT[i], matrix orientation user i x input j",
+    "theta_ij": "theta_ij = Z_dom[j,i] / Z_total[j,i], matrix orientation user i x input j",
+    "beta_j": "beta_j from normalized selected final-demand spending by product j",
+    "theta_cj": "theta_cj = C_dom[j] / C_total[j] over selected final-demand columns"
+  }
+}

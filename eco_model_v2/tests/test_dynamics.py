@@ -68,3 +68,14 @@ class TestCountryDynamics:
         assert (s.X_imp >= 0).all()
         assert (s.C_dom >= 0).all()
         assert (s.C_imp >= 0).all()
+
+    def test_income_update_eq26(self, dynamics_setup):
+        """eq 26: I_{t+1} 由 t 期要素价格和 t+1 期要素使用量决定。"""
+        engine, state, imp_price = dynamics_setup
+        new_state = engine.step(state, imp_price)
+
+        Nl = engine.Nl
+        M = engine.M
+        factor_usage = new_state.X_dom[:, Nl:Nl + M].sum(axis=0)
+        expected_income = float(np.dot(state.price[Nl:Nl + M], factor_usage))
+        assert new_state.income == pytest.approx(expected_income, rel=1e-10, abs=1e-10)

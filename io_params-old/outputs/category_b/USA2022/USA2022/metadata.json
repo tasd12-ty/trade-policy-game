@@ -1,0 +1,23 @@
+{
+  "country": "USA",
+  "year": 2022,
+  "data_root": "中美投入产出表数据（附表格阅读说明）",
+  "total_csv": "中美投入产出表数据（附表格阅读说明）/美国/OECD美国投入产出数据/投入产出，行业-行业，total口径/USA2022ttl.csv",
+  "domestic_csv": "中美投入产出表数据（附表格阅读说明）/美国/OECD美国投入产出数据/投入产出（含进口行），行业-行业，Domestic口径/USA2022dom.csv",
+  "external_inputs_json": "io_params/category_b/external_inputs_default.json",
+  "price_mode": "exogenous",
+  "consumption_columns": [
+    "HFCE",
+    "NPISH",
+    "GGFC"
+  ],
+  "solver_max_iterations": 400,
+  "solver_tolerance": 1e-08,
+  "notes": {
+    "factor_params": "w=LaborIncome/L, r=external, K=CapitalIncome/r, L=external labor population",
+    "P_j": "Endogenous mode: solved from static equilibrium system; exogenous mode: from external JSON",
+    "P_j_O": "Endogenous mode: implied import prices from equilibrium; exogenous mode: from external JSON",
+    "E_j": "Baseline export quantity E_j = ExportValue_j / P_j",
+    "status": "Enhanced B-class implementation with endogenous price calibration and exogenous fallback"
+  }
+}

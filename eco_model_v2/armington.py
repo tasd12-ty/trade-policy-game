@@ -17,6 +17,42 @@ import numpy as np
 from .utils import EPS, clamp_positive, safe_log
 
 
+# ---- CES 价格归一化常数 ----
+
+def ces_price_norm(
+    gamma: float | np.ndarray,
+    rho: float | np.ndarray,
+    ic: float | np.ndarray = 1.0,
+) -> np.ndarray:
+    """CES 价格归一化常数 ln(P*/P_d)。
+
+    P* = P_d · exp(c)，其中 c = ces_price_norm(γ, ρ, ic)。
+
+    一般形式：
+        c = ln([γ^σ + (1-γ)^σ · ic^{1-σ}]^{1/(1-σ)})
+
+    CD 极限 (ρ→0, σ→1)：
+        c = (1-γ)·ln(ic) − γ·ln γ − (1-γ)·ln(1-γ)
+    """
+    g = np.clip(np.asarray(gamma, dtype=float), 1e-8, 1.0 - 1e-8)
+    r = np.asarray(rho, dtype=float)
+    ic_v = np.maximum(np.asarray(ic, dtype=float), EPS)
+    sigma = _sigma_from_rho(r)
+
+    near_cd = np.abs(sigma - 1.0) < 1e-8
+
+    # CD 极限
+    cd_c = (1.0 - g) * safe_log(ic_v) - g * safe_log(g) - (1.0 - g) * safe_log(1.0 - g)
+
+    # 一般 CES
+    safe_sigma = np.where(near_cd, 2.0, sigma)  # 避免 sigma=1 除零
+    safe_one_minus = np.where(near_cd, -1.0, 1.0 - safe_sigma)
+    term = g ** safe_sigma + (1.0 - g) ** safe_sigma * ic_v ** safe_one_minus
+    gen_c = safe_log(np.maximum(term, EPS)) / safe_one_minus
+
+    return np.where(near_cd, cd_c, gen_c)
+
+
 # ---- 替代弹性 ----
 
 def _sigma_from_rho(rho: np.ndarray) -> np.ndarray:
@@ -58,10 +94,16 @@ def armington_share_from_prices(
     # Cobb-Douglas 极限：σ=1 时 θ = γ
     near_cd = np.abs(sigma - 1.0) < 1e-8
 
-    # 一般情形
-    w_d = (g ** sigma) * (p_d ** (1.0 - sigma))
-    w_f = ((1.0 - g) ** sigma) * (p_f ** (1.0 - sigma))
-    share = w_d / np.clip(w_d + w_f, EPS, None)
+    # 一般情形——使用对数空间 sigmoid 避免 p^(1-σ) 下溢
+    # ln(w_d) = σ·ln(γ) + (1-σ)·ln(p_d)
+    # ln(w_f) = σ·ln(1-γ) + (1-σ)·ln(p_f)
+    # θ = 1 / (1 + exp(ln_wf - ln_wd))  = sigmoid(ln_wd - ln_wf)
+    ln_wd = sigma * safe_log(g) + (1.0 - sigma) * safe_log(p_d)
+    ln_wf = sigma * safe_log(1.0 - g) + (1.0 - sigma) * safe_log(p_f)
+    diff = ln_wd - ln_wf
+    # 数值稳定的 sigmoid：clamp 避免 exp 溢出
+    diff_clamped = np.clip(diff, -500.0, 500.0)
+    share = 1.0 / (1.0 + np.exp(-diff_clamped))
 
     # 边界修正
     share = np.where(near_cd, g, share)
@@ -130,7 +172,7 @@ def armington_price(
 
     边界：
     - σ→∞: min(p_d, p_f)
-    - σ→1: exp(γ·ln(p_d) + (1-γ)·ln(p_f))  几何平均
+    - σ→1: P_d^γ · P_f^{1-γ} / (γ^γ · (1-γ)^{1-γ})  (CD 对偶成本)
     """
     g = np.clip(np.asarray(gamma, dtype=float), 1e-8, 1.0 - 1e-8)
     p_d = clamp_positive(p_dom)
@@ -141,14 +183,25 @@ def armington_price(
     near_perfect = np.abs(1.0 - r) < 1e-4
     near_cd = np.abs(sigma - 1.0) < 1e-8
 
-    # 一般情形
-    inner = (g ** sigma) * (p_d ** (1.0 - sigma)) + \
-            ((1.0 - g) ** sigma) * (p_f ** (1.0 - sigma))
-    out = np.clip(inner, EPS, None) ** (1.0 / (1.0 - sigma))
+    # 一般情形——对数空间计算避免 p^(1-σ) 下溢
+    # P* = [γ^σ·p_d^{1-σ} + (1-γ)^σ·p_f^{1-σ}]^{1/(1-σ)}
+    # ln(P*) = (1/(1-σ)) · ln[exp(ln_wd) + exp(ln_wf)]  使用 log-sum-exp
+    ln_wd = sigma * safe_log(g) + (1.0 - sigma) * safe_log(p_d)
+    ln_wf = sigma * safe_log(1.0 - g) + (1.0 - sigma) * safe_log(p_f)
+    # log-sum-exp: ln(e^a + e^b) = max(a,b) + ln(1 + exp(-|a-b|))
+    ln_max = np.maximum(ln_wd, ln_wf)
+    ln_sum = ln_max + np.log1p(np.exp(-np.abs(ln_wd - ln_wf)))
+    # 1/(1-sigma) 可以为负或很大；直接用 exp
+    safe_one_minus_sigma = np.where(near_cd, 1.0, 1.0 - sigma)
+    out = np.exp(ln_sum / safe_one_minus_sigma)
 
-    # σ=1 几何平均修正
-    geom = np.exp(g * safe_log(p_d) + (1.0 - g) * safe_log(p_f))
-    out = np.where(near_cd, geom, out)
+    # σ=1 CD 对偶修正：P* = P_d^γ · P_f^{1-γ} / (γ^γ · (1-γ)^{1-γ})
+    # L'Hôpital 极限包含 −γ·ln γ − (1-γ)·ln(1-γ) 熵项
+    cd_val = np.exp(
+        g * safe_log(p_d) + (1.0 - g) * safe_log(p_f)
+        - g * safe_log(g) - (1.0 - g) * safe_log(1.0 - g)
+    )
+    out = np.where(near_cd, cd_val, out)
 
     # 完全替代修正
     out = np.where(near_perfect, np.minimum(p_d, p_f), out)

@@ -5,7 +5,7 @@ import pytest
 
 from eco_model_v2.presets import make_symmetric_params
 from eco_model_v2.sandbox import EconomicSandbox, GameConfig
-from eco_model_v2.agent_interface import FixedPolicyAgent
+from eco_model_v2.agent_interface import FixedPolicyAgent, TitForTatAgent
 
 
 class TestEconomicSandbox:
@@ -68,3 +68,26 @@ class TestEconomicSandbox:
 
         assert len(result.rounds) == 2
         assert result.history_length > 15  # warmup + settle + rounds
+
+    def test_tit_for_tat_tracks_opponent_tariff(self):
+        """Tit-for-Tat 应在下一轮复制对手关税水平。"""
+        params = make_symmetric_params(Nl=3, Ml=1, M_factors=1)
+        config = GameConfig(
+            rounds=2,
+            decision_interval=1,
+            warmup_periods=0,
+        )
+        sandbox = EconomicSandbox(params, config, tau=0.2)
+        sandbox.initialize()
+
+        agents = {
+            "H": FixedPolicyAgent(tariff={2: 0.3}),
+            "F": TitForTatAgent(),
+        }
+        result = sandbox.run_game(agents)
+
+        # 第 1 轮尚未观察到对手政策，第 2 轮应开始模仿
+        f_round1 = result.rounds[0].decisions["F"]["tariff"]
+        f_round2 = result.rounds[1].decisions["F"]["tariff"]
+        assert f_round1 == {}
+        assert f_round2.get(2, 0.0) == pytest.approx(0.3, rel=1e-2)

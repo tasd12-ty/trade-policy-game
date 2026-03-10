@@ -1,0 +1,5 @@
+{
+  "horizon_periods": 10,
+  "export_base_source": "external_defaults",
+  "p_t_o_base_source": "external_defaults"
+}

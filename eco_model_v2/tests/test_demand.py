@@ -59,6 +59,10 @@ class TestStaticDemand:
         C_dom = static_consumption_demand_dom(beta, theta_c, income, price, Ml)
         C_imp = static_consumption_demand_imp(beta, theta_c, income, imp_price, Ml)
 
+        # 非贸易部门应严格无进口
+        assert np.all(X_imp[:, :Ml] == 0.0)
+        assert np.all(C_imp[:Ml] == 0.0)
+
         # 消费支出
         cons_spending = float(
             np.dot(price[:Nl], C_dom) + np.dot(imp_price, C_imp)

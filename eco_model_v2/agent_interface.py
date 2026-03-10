@@ -99,29 +99,50 @@ class FixedPolicyAgent(PolicyAgent):
 class TitForTatAgent(PolicyAgent):
     """以牙还牙策略：复制对手上一轮的政策。
 
-    观测中的 import_cost 反映了对手施加的关税（cost > base 表示有关税）。
-    决策时以对手的 import_cost 变化推断其关税率，然后模仿。
+    决策时从观测中的 opponent_import_cost 推断对手关税率并模仿。
+    若未提供基准进口成本，则使用首次观测到的对手进口成本作为基准。
     """
 
     def __init__(
         self,
         initial_tariff: Dict[int, float] | None = None,
-        base_import_cost: float = 1.1,
+        base_import_cost: float | List[float] | None = None,
     ):
         self._tariff = dict(initial_tariff or {})
         self._quota: Dict[int, float] = {}
-        self._base_cost = base_import_cost
+        self._base_costs: List[float] | None = None
+        if base_import_cost is not None:
+            if isinstance(base_import_cost, list):
+                self._base_costs = [float(x) for x in base_import_cost]
+            else:
+                self._base_costs = [float(base_import_cost)]
         self._last_obs: Dict | None = None
 
     def observe(self, context: Dict) -> None:
         self._last_obs = context
-        # 从对手的 price vs 本国 import_cost 推断对手关税
-        # opponent_price 变化间接反映了对手的关税效应
-        # 简化实现：从 import_cost 推断 tariff = (cost / base) - 1
-        import_costs = context.get("import_cost", [])
+
+        import_costs = context.get("opponent_import_cost", [])
+        if not import_costs:
+            # 兼容旧观测结构（退化逻辑）
+            import_costs = context.get("import_cost", [])
+
+        if not import_costs:
+            self._tariff = {}
+            return
+
+        obs_costs = [float(x) for x in import_costs]
+        if self._base_costs is None:
+            self._base_costs = obs_costs.copy()
+        elif len(self._base_costs) == 1 and len(obs_costs) > 1:
+            self._base_costs = [self._base_costs[0] for _ in obs_costs]
+        elif len(self._base_costs) != len(obs_costs):
+            base0 = self._base_costs[0] if self._base_costs else 1.0
+            self._base_costs = [base0 for _ in obs_costs]
+
         inferred_tariff = {}
-        for j, cost in enumerate(import_costs):
-            rate = max(0.0, float(cost) / max(self._base_cost, 1e-9) - 1.0)
+        for j, cost in enumerate(obs_costs):
+            base = self._base_costs[j]
+            rate = max(0.0, cost / max(base, 1e-9) - 1.0)
             if rate > 0.01:
                 inferred_tariff[j] = rate
         self._tariff = inferred_tariff

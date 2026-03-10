@@ -145,18 +145,18 @@ def compute_marginal_cost(
     Ml: int,
     M_factors: int = 0,
 ) -> np.ndarray:
-    """边际成本——对偶价格形式（均衡求解用）。
+    """边际成本——对偶价格形式 (eq 10)。
 
-    简化形式（与 grad_op model.py 一致）：
-        ln λ_i = −ln A_i + Σ_j α_{ij} · ln P*_j
+    完整形式：
+        ln λ_i = −ln A_i − Σ_j α_{ij}·ln(α_{ij}) + Σ_j α_{ij}·ln P*_j
 
     其中 P*_j 为：
     - 非贸易品 j < Ml:     P*_j = P_j
     - 可贸易品 Ml ≤ j < Nl: P*_j = Armington 对偶价格
     - 要素 j ≥ Nl:         P*_j = P_j（要素价格）
 
-    注：此简化形式省略了 −Σ α·ln(α) 常数项，假设 A 已吸收该缩放。
-    与 grad_op 的 compute_marginal_cost 完全一致，在均衡和动态中均可使用。
+    −Σ α·ln(α) 项为 Cobb-Douglas 的 CES 约化常数，保证
+    当所有 P*_j = 1 时 λ_i = 1/A_i · ∏ α^{-α}。
 
     参数：
         A:         (Nl,)       TFP
@@ -182,6 +182,9 @@ def compute_marginal_cost(
             a = float(alpha[i, j])
             if a <= 0.0:
                 continue
+
+            # eq 10 常数项：−α_{ij}·ln(α_{ij})
+            log_cost -= a * float(safe_log(a))
 
             if j < Ml:
                 # 非贸易品

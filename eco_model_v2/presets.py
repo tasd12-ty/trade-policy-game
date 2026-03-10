@@ -134,20 +134,33 @@ def make_symmetric_params(
 def apply_tariff(
     params: CountryParams,
     tariff_rates: Dict[int, float],
+    *,
+    base_import_cost: np.ndarray | None = None,
 ) -> CountryParams:
     """对指定部门施加关税，返回新参数。
 
-    关税通过修改 import_cost 实现：
-    import_cost'[j] = import_cost[j] × (1 + tariff_rate[j])
+    关税通过修改 import_cost 实现（税率“水平”语义）：
+    import_cost'[j] = base_import_cost[j] × (1 + tariff_rate[j])
+
+    若未提供 base_import_cost，则默认使用 params.import_cost 作为基准。
 
     参数：
         params:       原始参数
         tariff_rates: {部门索引: 关税率}，如 {3: 0.2} 表示部门 3 加 20% 关税
+        base_import_cost: (Nl,) 关税基准进口成本（可选）
     """
+    base_ic = (
+        np.asarray(base_import_cost, dtype=float)
+        if base_import_cost is not None
+        else np.asarray(params.import_cost, dtype=float)
+    )
+    if base_ic.shape != np.asarray(params.import_cost, dtype=float).shape:
+        raise ValueError("base_import_cost 形状必须与 params.import_cost 一致")
+
     new_ic = np.array(params.import_cost, copy=True, dtype=float)
     for sector, rate in tariff_rates.items():
         if 0 <= sector < params.Nl:
-            new_ic[sector] *= (1.0 + max(rate, 0.0))
+            new_ic[sector] = float(base_ic[sector]) * (1.0 + max(float(rate), 0.0))
 
     return CountryParams(
         alpha=params.alpha, gamma=params.gamma, rho=params.rho,

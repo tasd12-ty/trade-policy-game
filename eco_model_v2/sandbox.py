@@ -87,13 +87,17 @@ class EconomicSandbox:
         self.sim = TwoCountrySimulator(
             params, tau=tau, supply_chain=supply_chain,
         )
+        self.policy_events: List[Dict] = []
 
     def initialize(self) -> None:
         """初始化仿真环境。"""
         self.sim.initialize()
 
     def initialize_from_equilibrium(self) -> None:
-        """从均衡态初始化。"""
+        """从均衡态初始化。
+
+        .. deprecated:: 推荐使用 initialize()，详见 io-final/INIT_COMPARISON.md。
+        """
         self.sim.initialize_from_equilibrium()
 
     def get_observation(self, country: str) -> Dict:
@@ -116,8 +120,20 @@ class EconomicSandbox:
 
         if tariff:
             self.sim.apply_tariff(country, tariff)
+            self.policy_events.append({
+                "period": self.sim.t,
+                "country": country,
+                "type": "import_tariff",
+                "sectors": dict(tariff),
+            })
         if quota:
             self.sim.apply_quota(country, quota)
+            self.policy_events.append({
+                "period": self.sim.t,
+                "country": country,
+                "type": "export_control",
+                "sectors": dict(quota),
+            })
 
     def step_environment(self, periods: int) -> None:
         """推进仿真。"""
@@ -141,6 +157,7 @@ class EconomicSandbox:
         new_sandbox = EconomicSandbox.__new__(EconomicSandbox)
         new_sandbox.config = self.config
         new_sandbox.sim = self.sim.fork()
+        new_sandbox.policy_events = list(self.policy_events)
         return new_sandbox
 
     # ---- 博弈运行 ----

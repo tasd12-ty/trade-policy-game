@@ -1,0 +1,17 @@
+{
+  "price_mode": "endogenous",
+  "labor_income_total": 1.0,
+  "labor_population": 1.0,
+  "interest_rate_r": 1.0,
+  "capital_income_total": 1.0,
+  "domestic_price_default": 1.0,
+  "import_price_multiplier_default": 1.0,
+  "export_value_fallback": 1.0,
+  "rho_default": 1.0,
+  "tfp_A_default": 1.0,
+  "import_cost_default": 1.0,
+  "use_all_sectors_tradable": 1.0,
+  "fallback_to_exogenous_if_solver_fails": 1.0,
+  "domestic_prices_by_sector": {},
+  "import_prices_by_sector": {}
+}

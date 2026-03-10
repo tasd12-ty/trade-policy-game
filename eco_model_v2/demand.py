@@ -309,7 +309,9 @@ def static_intermediate_demand_imp(
     for j in range(Ml, Nl):
         X_imp[:, j] = alpha[:, j] * (1.0 - theta[:, j]) * PY[:, 0] / p_imp[j]
 
-    return clamp_positive(X_imp)
+    # 非贸易品严格无进口
+    X_imp[:, :Ml] = 0.0
+    return np.maximum(X_imp, 0.0)
 
 
 def static_consumption_demand_dom(
@@ -383,4 +385,6 @@ def static_consumption_demand_imp(
     C_imp = np.zeros(Nl, dtype=float)
     C_imp[Ml:] = b[Ml:] * (1.0 - theta_cons[Ml:]) * I / p_imp[Ml:]
 
-    return clamp_positive(C_imp)
+    # 非贸易品严格无进口消费
+    C_imp[:Ml] = 0.0
+    return np.maximum(C_imp, 0.0)

@@ -65,3 +65,23 @@ class TestComputeMarginalCost:
         mc2 = compute_marginal_cost(A, alpha, p2, imp2, gamma, rho, Ml, M)
         # 边际成本随价格线性缩放（CD 特性）
         np.testing.assert_allclose(mc2, mc1 * 2, rtol=0.1)
+
+    def test_eq10_constant_term(self):
+        """eq 10 含 −Σ α·ln(α) 常数项：当 P=1, A=1 时 λ = ∏ α^{-α}。"""
+        # 使用全非贸易品 (Ml=Nl) 避免 Armington 对偶价格干扰
+        Nl, Ml, M = 2, 2, 1
+        alpha = np.array([[0.3, 0.3, 0.4],
+                          [0.2, 0.4, 0.4]])
+        gamma = np.ones((Nl, Nl))
+        rho = np.zeros((Nl, Nl))
+        A = np.ones(Nl)
+        price = np.ones(Nl + M)
+        imp_price = np.ones(Nl)
+        mc = compute_marginal_cost(A, alpha, price, imp_price, gamma, rho, Ml, M)
+        # 手工验证：对 sector 0, α = [0.3, 0.3, 0.4]
+        # λ = (1/A) · ∏ α_j^{-α_j} = 0.3^{-0.3} * 0.3^{-0.3} * 0.4^{-0.4}
+        expected_0 = 0.3 ** (-0.3) * 0.3 ** (-0.3) * 0.4 ** (-0.4)
+        np.testing.assert_allclose(mc[0], expected_0, rtol=1e-6)
+        # 对 sector 1, α = [0.2, 0.4, 0.4]
+        expected_1 = 0.2 ** (-0.2) * 0.4 ** (-0.4) * 0.4 ** (-0.4)
+        np.testing.assert_allclose(mc[1], expected_1, rtol=1e-6)

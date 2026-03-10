@@ -20,7 +20,7 @@ from typing import Callable, Dict, List, Tuple
 
 import numpy as np
 
-from .utils import EPS, clamp_positive
+from .utils import EPS
 
 
 # ---- 供应链节点与边 ----

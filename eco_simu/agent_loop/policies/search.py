@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import copy
 import math
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 import numpy as np
-import sys
-import time
-import warnings
 from itertools import product
 
 from ..actions import apply_actions_to_sim, zeros_like_action
@@ -15,22 +12,8 @@ from ..reward import compute_reward
 
 from .llm import PolicyAdapter
 
-"""
-SearchPolicyAdapter：在克隆仿真器上演练候选动作，按配置化目标函数选择最优回应。
-"""
-
-
 class SearchPolicyAdapter(PolicyAdapter):
-    """基于规则或数值优化的策略适配器。
-    
-    支持多种搜索方法 (method):
-    - 'grid'：网格搜索（默认，也是唯一实现）。遍历用户指定的关税/配额“挡位”，在目标部门上做笛卡尔积（关税×配额×部门）。
-
-    逻辑说明 (Game Logic):
-    - 采用“独立最优回应” (Independent Best Response) 机制。
-    - 假设对手在未来 k 步内**不会采取新行动** (Fixed Action / Inertia)。
-    - target_sectors 必须明确提供；不再做“自动截断 + 候选上限”的简化。
-    """
+    """Grid search policy: evaluates candidate tariff/quota combinations via forward simulation."""
 
     def __init__(
         self,
@@ -74,63 +57,32 @@ class SearchPolicyAdapter(PolicyAdapter):
     def __call__(self, obs: Dict[str, Any]) -> Dict[str, Any]:
         if self._sim is None or self._actor is None:
             raise RuntimeError("SearchPolicyAdapter must be bound via bind_runtime() before use")
-
-        self._obs = obs  # 保存当前观测供评估使用
+        
+        self._obs = obs
         actor = str(obs.get("country") or self._actor).upper()
         targets = self._select_targets(obs, actor)
-
-        if self.method != "grid":
-            warnings.warn(f"Method '{self.method}' not supported; defaulting to grid search.", UserWarning)
         return self._optimize_grid(actor, targets)
 
-    # ----------------------------
-    # 优化策略实现
-    # ----------------------------
-
-    def _optimize_grid(self, actor: str, targets: List[int]) -> Dict[str, Any]:
-        """原有网格搜索逻辑"""
+    def _optimize_grid(self, actor: str, targets) -> Dict[str, Any]:
         candidates = self._build_candidates(actor, targets)
-        diagnostics: List[Tuple[str, float]] = []
         best_score = -math.inf
-        best_action: Optional[Dict[str, Any]] = None
-
-        n_cand = len(candidates)
-        print(f"[Search] Grid search started: {n_cand} candidates (targets={targets})")
+        best_action = None
         
-        t0 = time.time()
-        for i, action in enumerate(candidates):
-            if i > 0 and i % 10 == 0:
-                elapsed = time.time() - t0
-                rate = i / max(elapsed, 1e-3)
-                print(f"[Search] .. evaluated {i}/{n_cand} ({rate:.1f} cand/s)", end="\r", file=sys.stderr)
-
+        for action in candidates:
             try:
                 score = self._evaluate_action(action)
+                if score > best_score:
+                    best_score = score
+                    best_action = action
             except Exception:
                 continue
-            diagnostics.append((self._summarize_action(action), float(score)))
-            if score > best_score:
-                best_score = float(score)
-                best_action = action
 
         if best_action is None:
             best_action = self._zero_action(actor)
-            best_score = float("-inf")
 
-        action_out = copy.deepcopy(best_action)
-        action_out["rationale"] = f"grid search objective={self.objective}; score={best_score:.6g}"
-        if diagnostics:
-            top_diag = ", ".join(f"{desc}:{val:.3g}" for desc, val in diagnostics[:5])
-            action_out["plan"] = f"tested {len(diagnostics)} candidates -> {top_diag}"
-        return action_out
-
-
-    # ----------------------------
-    # 核心评估逻辑
-    # ----------------------------
+        return copy.deepcopy(best_action)
 
     def _evaluate_action(self, action: Dict[str, Any]) -> float:
-        """评估单个动作的预期收益"""
         fork = getattr(self._sim, "fork", None)
         cloner = getattr(self._sim, "clone", None)
         if callable(fork):
@@ -158,11 +110,6 @@ class SearchPolicyAdapter(PolicyAdapter):
         weights = self._reward_weights or (self._obs and self._obs.get("reward_weights")) or {"w_income": 1.0, "w_price": 1.0, "w_trade": 1.0}
         fut_obs["reward_weights"] = weights
         return self._objective_value(fut_obs, weights)
-
-    # ----------------------------
-    # 辅助方法
-    # ----------------------------
-
     def _zero_action(self, actor: str) -> Dict[str, Any]:
         action = zeros_like_action()
         action["actor"] = actor
@@ -174,8 +121,7 @@ class SearchPolicyAdapter(PolicyAdapter):
             raise ValueError("target_sectors must be provided for search; set sectors=... in policy spec")
         return [i for i in self.target_sectors if 0 <= i < self.n]
 
-    def _build_candidates(self, actor: str, targets: Iterable[int]) -> List[Dict[str, Any]]:
-        """生成跨部门、跨杠杆的笛卡尔积候选（关税×配额×部门），不再截断候选数量。"""
+    def _build_candidates(self, actor: str, targets):
         targets_list = list(targets)
         if not targets_list:
             return [self._zero_action(actor)]

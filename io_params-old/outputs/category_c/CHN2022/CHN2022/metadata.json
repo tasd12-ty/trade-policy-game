@@ -1,0 +1,24 @@
+{
+  "country": "CHN",
+  "year": 2022,
+  "data_root": "中美投入产出表数据（附表格阅读说明）",
+  "total_csv": "中美投入产出表数据（附表格阅读说明）/中国/OECD中国投入产出数据/投入产出，行业-行业，total口径/CHN2022ttl.csv",
+  "domestic_csv": "中美投入产出表数据（附表格阅读说明）/中国/OECD中国投入产出数据/投入产出（含进口行），行业-行业，Domestic口径/CHN2022dom.csv",
+  "external_inputs_json": "io_params/category_c/external_inputs_default.json",
+  "consumption_columns": [
+    "HFCE",
+    "NPISH",
+    "GGFC"
+  ],
+  "periods_override": null,
+  "export_base_csv": null,
+  "p_t_o_base_csv": null,
+  "notes": {
+    "A_i": "外生基线生产率，默认=1，可按部门覆盖",
+    "gamma_ij": "按既有口径由 theta_ij 映射，并允许外生覆盖",
+    "gamma_cj": "按既有口径由 theta_cj 映射，并允许外生覆盖",
+    "rho_cj": "消费端 CES 形状参数，默认=1，可按部门覆盖",
+    "Export_t": "Export_t[j] = Export_base_j[j] * multiplier_t[j]",
+    "P_t_O": "P_t_O[t,j] = P_t_O_base_j[j] * multiplier_t[j]"
+  }
+}

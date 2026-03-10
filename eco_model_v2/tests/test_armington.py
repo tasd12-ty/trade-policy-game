@@ -42,9 +42,12 @@ class TestArmingtonPrice:
     """CES 对偶价格: [γ^σ · p_d^{1-σ} + (1-γ)^σ · p_f^{1-σ}]^{1/(1-σ)}。"""
 
     def test_equal_prices_rho_zero(self):
-        """ρ→0 (σ→1), p_d == p_f → P* ≈ p_d。"""
-        p = armington_price(0.5, 1.0, 1.0, rho=1e-10)
-        assert abs(p - 1.0) < 1e-3
+        """ρ→0 (σ→1), p_d == p_f → P* = p / (γ^γ·(1-γ)^{1-γ})。"""
+        gamma = 0.5
+        p = armington_price(gamma, 1.0, 1.0, rho=1e-10)
+        # CD dual includes entropy: P* = 1/(0.5^0.5 * 0.5^0.5) = 2.0
+        expected = 1.0 / (gamma ** gamma * (1 - gamma) ** (1 - gamma))
+        assert abs(p - expected) < 1e-3
 
     def test_positive(self):
         """CES 价格应为正。"""
@@ -52,11 +55,13 @@ class TestArmingtonPrice:
         assert p > 0
 
     def test_rho_zero(self):
-        """ρ→0 (σ→1) → geometric mean: exp(γ·ln(p_d) + (1-γ)·ln(p_f))。"""
+        """ρ→0 (σ→1) → CD dual: P_d^γ·P_f^{1-γ} / (γ^γ·(1-γ)^{1-γ})。"""
         gamma = 0.7
         p_d, p_f = 2.0, 3.0
         p = armington_price(gamma, p_d, p_f, rho=1e-10)
-        expected = np.exp(gamma * np.log(p_d) + (1 - gamma) * np.log(p_f))
+        geom = np.exp(gamma * np.log(p_d) + (1 - gamma) * np.log(p_f))
+        entropy = gamma ** gamma * (1 - gamma) ** (1 - gamma)
+        expected = geom / entropy
         assert abs(p - expected) < 1e-3
 
 

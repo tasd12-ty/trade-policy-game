@@ -18,8 +18,8 @@ from typing import Tuple
 
 import numpy as np
 
-from .utils import EPS, clamp_positive, tanh_damping, safe_log
-from .armington import theta_from_quantities
+from .utils import EPS, clamp_positive
+from .armington import theta_from_quantities, armington_share_from_prices
 from .production import compute_output, compute_marginal_cost
 from .factors import compute_income
 from .demand import (
@@ -27,6 +27,10 @@ from .demand import (
     compute_delta_x_imp,
     compute_delta_c_dom,
     compute_delta_c_imp,
+    static_intermediate_demand_dom,
+    static_intermediate_demand_imp,
+    static_consumption_demand_dom,
+    static_consumption_demand_imp,
 )
 from .types import CountryParams, CountryState
 
@@ -47,13 +51,19 @@ class CountryDynamics:
         self,
         params: CountryParams,
         tau: np.ndarray | float = 0.5,
-        normalize_gap: bool = True,
+        normalize_gap: bool = False,
+        numeraire: bool = False,
+        quantity_damping: float = 1.0,
+        walrasian: bool = False,
     ):
         self.params = params
         self.Nl = params.Nl
         self.Ml = int(params.Ml)
         self.M = int(params.M_factors)
         self.tradable_mask = params.tradable_mask
+        self.numeraire = numeraire
+        self.quantity_damping = quantity_damping
+        self.walrasian = walrasian
 
         # τ 向量化
         tau_val = np.asarray(tau, dtype=float)
@@ -71,14 +81,18 @@ class CountryDynamics:
     ) -> CountryState:
         """执行一期动态更新。
 
-        步骤：
-        1. 计算产出和边际成本
-        2. 计算 θ（用量端 Armington 份额）
-        3. 计算需求调整量 Δx, Δc
-        4. 更新价格 (eq 19)
-        5. 分配国内品 (eq 20-22)
-        6. 分配进口品 (eq 23-24)
-        7. 更新产出 (eq 25) 和收入 (eq 26)
+        walrasian=True 模式：
+            - 价格更新同 eq 19
+            - 数量从 Leontief 精确求解（无配给漂移）
+
+        walrasian=False 模式（默认）：
+            1. 计算产出和边际成本
+            2. 计算 θ（用量端 Armington 份额）
+            3. 计算需求调整量 Δx, Δc
+            4. 更新价格 (eq 19)
+            5. 分配国内品 (eq 20-22)
+            6. 分配进口品 (eq 23-24)
+            7. 更新产出 (eq 25) 和收入 (eq 26)
 
         参数：
             state:      当前状态
@@ -88,6 +102,9 @@ class CountryDynamics:
         返回：
             新状态 CountryState
         """
+        if self.walrasian:
+            return self._walrasian_step(state, imp_price)
+
         p = self.params
         Nl, Ml, M = self.Nl, self.Ml, self.M
         imp_p = clamp_positive(imp_price)
@@ -127,7 +144,8 @@ class CountryDynamics:
             imp_p, state.X_imp, Ml,
         )
 
-        income = compute_income(state.price, p.L, Nl)
+        # eq 16-18 中消费需求使用当期收入 I_t
+        income = max(float(state.income), EPS)
 
         delta_c_dom = compute_delta_c_dom(
             p.beta, theta_cons, income,
@@ -138,11 +156,13 @@ class CountryDynamics:
             imp_p, state.C_imp, Ml,
         )
 
-        # 计划需求量 = 当前量 × exp(Δ)
-        planned_X_dom = state.X_dom * np.exp(delta_x_dom)
-        planned_X_imp = state.X_imp * np.exp(delta_x_imp)
-        planned_C_dom = state.C_dom * np.exp(delta_c_dom)
-        planned_C_imp = state.C_imp * np.exp(delta_c_imp)
+        # 计划需求量 = 当前量 × exp(η·Δ)
+        # quantity_damping η < 1 使数量缓慢趋向最优，避免供需失衡
+        eta = self.quantity_damping
+        planned_X_dom = state.X_dom * np.exp(eta * delta_x_dom)
+        planned_X_imp = state.X_imp * np.exp(eta * delta_x_imp)
+        planned_C_dom = state.C_dom * np.exp(eta * delta_c_dom)
+        planned_C_imp = state.C_imp * np.exp(eta * delta_c_imp)
 
         # ---- 4. 价格更新 (eq 19) ----
         new_price = self._update_prices(
@@ -173,7 +193,13 @@ class CountryDynamics:
         new_output = np.concatenate([new_output_prod, np.asarray(p.L, dtype=float)])
 
         # ---- 8. 收入更新 (eq 26) ----
-        new_income = compute_income(new_price, p.L, Nl)
+        # I_{t+1} = 1^T · X_{t+1;·,Nl+1:Nl+M} · exp(p_t)_{Nl+1:Nl+M}
+        if M > 0:
+            factor_usage = actual_X_dom[:, Nl:Nl + M].sum(axis=0)
+            new_income = float(np.dot(factor_usage, state.price[Nl:Nl + M]))
+        else:
+            new_income = 0.0
+        new_income = max(new_income, EPS)
 
         return CountryState(
             X_dom=actual_X_dom,
@@ -206,12 +232,15 @@ class CountryDynamics:
         """
         Nl = self.Nl
 
+        # 出口需求使用外生 Export_t（对应状态中的 export_base）
+        export_demand = state.export_base[:Nl]
+
         # 计划总需求（国内品）
         planned_total = np.zeros(Nl + self.M, dtype=float)
         planned_total[:Nl] = (
             planned_X_dom[:, :Nl].sum(axis=0)
             + planned_C_dom
-            + state.export_base[:Nl]
+            + export_demand
         )
         # 要素需求
         if self.M > 0:
@@ -226,10 +255,18 @@ class CountryDynamics:
         if self.normalize_gap:
             gap = gap / np.maximum(supply, EPS)
 
-        # tanh 阻尼 + τ 缩放
-        delta = self.tau * tanh_damping(gap, cap=3.0)
+        # 严格按 eq 19：Δp = Diag(τ) · gap
+        delta = self.tau * gap
 
-        return clamp_positive(state.price * np.exp(delta))
+        new_price = clamp_positive(state.price * np.exp(delta))
+
+        # 可选：固定第一个要素价格作为记账单位（numeraire）
+        if self.numeraire and self.M > 0:
+            w = new_price[Nl]
+            if w > EPS:
+                new_price = new_price / w
+
+        return new_price
 
     # ---- eq 20-22: 国内品分配 ----
 
@@ -273,9 +310,9 @@ class CountryDynamics:
         actual_export[:Nl] *= scale[:Nl]
 
         return (
-            clamp_positive(actual_X_dom),
-            clamp_positive(actual_C_dom),
-            clamp_positive(actual_export),
+            np.maximum(actual_X_dom, 0.0),
+            np.maximum(actual_C_dom, 0.0),
+            np.maximum(actual_export, 0.0),
         )
 
     # ---- eq 23-24: 进口品分配 ----
@@ -319,4 +356,161 @@ class CountryDynamics:
             actual_X_imp *= cap_scale[np.newaxis, :]
             actual_C_imp *= cap_scale
 
-        return clamp_positive(actual_X_imp), clamp_positive(actual_C_imp)
+        # 非贸易品严格不进口
+        actual_X_imp[:, :self.Ml] = 0.0
+        actual_C_imp[:self.Ml] = 0.0
+
+        return np.maximum(actual_X_imp, 0.0), np.maximum(actual_C_imp, 0.0)
+
+    # ---- Walrasian 模式：价格动态 + Leontief 数量求解 ----
+
+    def _walrasian_step(
+        self,
+        state: CountryState,
+        imp_price: np.ndarray,
+    ) -> CountryState:
+        """Walrasian 动态步：价格渐进调整，数量从 Leontief 精确求解。
+
+        避免配给累积漂移。每步重新求解市场出清数量。
+
+        步骤：
+        1. 从当前价格计算 Armington 份额（价格端）
+        2. 计算静态最优需求 → 总需求
+        3. 供需缺口 → 价格更新 (eq 19)
+        4. 用新价格重新计算 Leontief → 出清数量
+        5. 用静态需求函数分配投入品
+        """
+        p = self.params
+        Nl, Ml, M = self.Nl, self.Ml, self.M
+        imp_p = clamp_positive(imp_price)
+
+        alpha = np.asarray(p.alpha, dtype=float)
+        gamma = np.asarray(p.gamma, dtype=float)
+        rho_arr = np.asarray(p.rho, dtype=float)
+        beta = np.asarray(p.beta, dtype=float)
+        gc = np.asarray(p.gamma_cons, dtype=float)
+        rc = np.asarray(p.rho_cons, dtype=float)
+        L = np.asarray(p.L, dtype=float)
+
+        P = state.price[:Nl].copy()
+        w = state.price[Nl:].copy()
+
+        # ---- 1. Armington 份额（价格端） ----
+        theta = np.ones((Nl, Nl), dtype=float)
+        theta_c = np.ones(Nl, dtype=float)
+        for j in range(Ml, Nl):
+            for i in range(Nl):
+                theta[i, j] = float(armington_share_from_prices(
+                    gamma[i, j], P[j], imp_p[j], rho_arr[i, j]))
+            theta_c[j] = float(armington_share_from_prices(
+                gc[j], P[j], imp_p[j], rc[j]))
+
+        # ---- 2. 当前供给 = 生产函数产出 ----
+        outputs = compute_output(
+            p.A, alpha, state.X_dom, state.X_imp,
+            gamma, rho_arr, Ml, M,
+        )
+
+        # ---- 3. 静态最优需求 at 当前价格 ----
+        price_full = np.concatenate([P, w])
+        income = compute_income(price_full, L, Nl)
+
+        opt_X_dom = static_intermediate_demand_dom(
+            alpha, theta, price_full, outputs, Ml, M)
+        opt_C_dom = static_consumption_demand_dom(
+            beta, theta_c, income, price_full, Ml)
+
+        # 总需求
+        total_demand = np.zeros(Nl + M, dtype=float)
+        total_demand[:Nl] = (
+            opt_X_dom[:, :Nl].sum(axis=0)
+            + opt_C_dom
+            + state.export_base[:Nl]
+        )
+        if M > 0:
+            total_demand[Nl:] = opt_X_dom[:, Nl:].sum(axis=0)
+
+        supply = np.concatenate([outputs, L])
+
+        # ---- 4. 价格更新 (eq 19) ----
+        gap = total_demand - supply
+        if self.normalize_gap:
+            gap = gap / np.maximum(supply, EPS)
+        delta = self.tau * gap
+        new_price = clamp_positive(state.price * np.exp(delta))
+
+        if self.numeraire and M > 0:
+            w_val = new_price[Nl]
+            if w_val > EPS:
+                new_price = new_price / w_val
+
+        # ---- 5. Leontief 求解 at 新价格 ----
+        new_P = new_price[:Nl]
+        new_w = new_price[Nl:]
+        new_imp_p = imp_p  # 进口价格由外部决定，本步不变
+
+        # Armington at new prices
+        new_theta = np.ones((Nl, Nl), dtype=float)
+        new_theta_c = np.ones(Nl, dtype=float)
+        for j in range(Ml, Nl):
+            for i in range(Nl):
+                new_theta[i, j] = float(armington_share_from_prices(
+                    gamma[i, j], new_P[j], new_imp_p[j], rho_arr[i, j]))
+            new_theta_c[j] = float(armington_share_from_prices(
+                gc[j], new_P[j], new_imp_p[j], rc[j]))
+
+        # 值 Leontief: B[j,i] = alpha[i,j] * theta[i,j]
+        B = np.zeros((Nl, Nl), dtype=float)
+        for i in range(Nl):
+            for j in range(Nl):
+                B[j, i] = alpha[i, j] * (new_theta[i, j] if j >= Ml else 1.0)
+
+        PY_C = np.array([
+            beta[j] * (new_theta_c[j] if j >= Ml else 1.0) * income
+            for j in range(Nl)
+        ])
+        PY_E = new_P * state.export_base[:Nl]
+
+        try:
+            L_inv = np.linalg.inv(np.eye(Nl) - B)
+        except np.linalg.LinAlgError:
+            L_inv = np.eye(Nl)
+
+        PY_eq = np.maximum(L_inv @ (PY_C + PY_E), EPS)
+        new_output_eq = np.maximum(PY_eq / np.maximum(new_P, EPS), EPS)
+
+        # ---- 6. 分配投入品（静态需求） ----
+        new_X_dom = static_intermediate_demand_dom(
+            alpha, new_theta, new_price, new_output_eq, Ml, M)
+        new_X_imp = static_intermediate_demand_imp(
+            alpha[:, :Nl], new_theta, new_imp_p, new_price, new_output_eq, Ml)
+        new_C_dom = static_consumption_demand_dom(
+            beta, new_theta_c, state.income, new_price, Ml)
+        new_C_imp = static_consumption_demand_imp(
+            beta, new_theta_c, state.income, new_imp_p, Ml)
+
+        # eq 26: 用 t 期要素价格与 t+1 期要素使用量更新收入
+        if M > 0:
+            factor_usage = new_X_dom[:, Nl:Nl + M].sum(axis=0)
+            new_income = float(np.dot(factor_usage, state.price[Nl:Nl + M]))
+        else:
+            new_income = 0.0
+        new_income = max(new_income, EPS)
+
+        # 出口实际量 = export_base（Walrasian 模式不配给出口）
+        new_export = state.export_base.copy()
+
+        new_output = np.concatenate([new_output_eq, L.copy()])
+
+        return CountryState(
+            X_dom=new_X_dom,
+            X_imp=new_X_imp,
+            C_dom=new_C_dom,
+            C_imp=new_C_imp,
+            price=new_price,
+            imp_price=new_imp_p,
+            export_base=state.export_base.copy(),
+            export_actual=new_export,
+            output=new_output,
+            income=float(new_income),
+        )

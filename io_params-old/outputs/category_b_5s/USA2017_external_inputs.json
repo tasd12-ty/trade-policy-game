@@ -1,0 +1,10 @@
+{
+  "price_mode": "exogenous",
+  "labor_income_total": 382294.0,
+  "labor_population": 382294.0,
+  "interest_rate_r": 1.0,
+  "capital_income_total": 586818.0,
+  "domestic_price_default": 1.0,
+  "import_price_multiplier_default": 1.0,
+  "export_value_fallback": 1.0
+}

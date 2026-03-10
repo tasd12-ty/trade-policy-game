@@ -24,7 +24,7 @@ import numpy as np
 
 from .armington import armington_share_from_prices
 from .production import compute_output, compute_marginal_cost
-from .factors import compute_income, compute_income_value_added, factor_clearing_residual
+from .factors import compute_income, factor_clearing_residual
 from .demand import (
     static_intermediate_demand_dom,
     static_intermediate_demand_imp,
@@ -112,34 +112,31 @@ def _build_residuals(
     残差组成（每国）：
     1. 零利润 (eq 28): P_i = λ_i(price)          — Nl 个
     2. 要素市场出清 (eq 29)                        — M 个
-    3. 商品市场出清 (Nl-1 个，利用 Walras 定律丢弃第一个, 10x 权重)
+    3. 商品市场出清 (eq 19=0 的静态对应，全部 Nl 个部门)
     4. 贸易收支 (eq 30)                            — 1 个
     全局：
-    5. 名义锚: P_1^H = 1, P_1^F = 1               — 2 个
+    5. 名义锚: w_H = 1, w_F = 1 (要素价格锚)     — 2 个
+       注：锚在要素价格（而非商品价格）避免与零利润冲突。
 
-    总残差数 = 2×(Nl + M + Nl-1 + 1) + 2 = 2×(2Nl+M) + 2
-    未知量   = 2×(Nl+M + Nl) = 2×(2Nl+M)
+    总残差数 = 2×(Nl + M + Nl + 1) + 2（过识别最小二乘）
+    未知量   = 2×(Nl+M + Nl)
     """
     Nl = params.Nl
     M = params.M
-    Ml = params.Ml
 
     price_h, output_h, price_f, output_f = _unpack_vars(log_vec, Nl, M)
 
     # 导出需求量
-    X_dom_h, X_imp_h, C_dom_h, C_imp_h, imp_h, inc_h = _compute_country_quantities(
+    X_dom_h, X_imp_h, C_dom_h, C_imp_h, imp_h, _ = _compute_country_quantities(
         params.home, price_h, output_h, price_f)
-    X_dom_f, X_imp_f, C_dom_f, C_imp_f, imp_f, inc_f = _compute_country_quantities(
+    X_dom_f, X_imp_f, C_dom_f, C_imp_f, imp_f, _ = _compute_country_quantities(
         params.foreign, price_f, output_f, price_h)
 
     res = []
 
-    for cp, price, output, X_dom, X_imp, C_dom, C_imp, imp_price, \
-        partner_X_imp, partner_C_imp in [
-            (params.home, price_h, output_h, X_dom_h, X_imp_h, C_dom_h, C_imp_h,
-             imp_h, X_imp_f, C_imp_f),
-            (params.foreign, price_f, output_f, X_dom_f, X_imp_f, C_dom_f, C_imp_f,
-             imp_f, X_imp_h, C_imp_h),
+    for cp, price, output, X_dom, X_imp, C_dom, C_imp, imp_price in [
+            (params.home, price_h, output_h, X_dom_h, X_imp_h, C_dom_h, C_imp_h, imp_h),
+            (params.foreign, price_f, output_f, X_dom_f, X_imp_f, C_dom_f, C_imp_f, imp_f),
     ]:
         # 1. 零利润 (eq 28): P_i = λ_i
         lambdas = compute_marginal_cost(
@@ -157,24 +154,26 @@ def _build_residuals(
             supply_val = max(float(price[Nl + k]) * float(cp.L[k]), 1.0)
             res.append(float(fac_res[k]) / supply_val)
 
-        # 3. 商品市场出清 (跳过 j=0，Walras 定律; 10x 权重)
-        MARKET_CLEARING_WEIGHT = 10.0
-        exports_qty = partner_X_imp.sum(axis=0) + partner_C_imp + cp.exports[:Nl]
-        for j in range(1, Nl):
+        # 3. 商品市场出清（按 PDF：Export 为外生量，不依赖对手内生进口）
+        exports_qty = cp.exports[:Nl]
+        for j in range(Nl):
             total_demand = float(X_dom[:, j].sum() + C_dom[j] + exports_qty[j])
-            res.append(float(relative_error(output[j], total_demand)) * MARKET_CLEARING_WEIGHT)
+            res.append(float(relative_error(output[j], total_demand)))
 
         # 4. 贸易收支 (eq 30)
-        exports_value = float(
-            np.dot(price[:Nl], partner_X_imp.sum(axis=0) + partner_C_imp)
-            + np.dot(price[:Nl], cp.exports[:Nl])
-        )
+        exports_value = float(np.dot(price[:Nl], cp.exports[:Nl]))
         imports_value = float(np.dot(imp_price, X_imp.sum(axis=0) + C_imp))
-        res.append(float(relative_error(exports_value, imports_value)))
+        TRADE_BALANCE_WEIGHT = 5.0
+        res.append(float(relative_error(exports_value, imports_value)) * TRADE_BALANCE_WEIGHT)
 
-    # 名义锚：两国各一个（与 grad_op 一致）
-    res.append(float(relative_error(price_h[0], 1.0)))
-    res.append(float(relative_error(price_f[0], 1.0)))
+    # 名义锚：要素价格 w=1（避免与零利润条件冲突）
+    if M > 0:
+        res.append(float(relative_error(price_h[Nl], 1.0)))
+        res.append(float(relative_error(price_f[Nl], 1.0)))
+    else:
+        # 无要素时回退到商品价格锚
+        res.append(float(relative_error(price_h[0], 1.0)))
+        res.append(float(relative_error(price_f[0], 1.0)))
 
     return np.asarray(res, dtype=float)
 
@@ -184,7 +183,11 @@ def _build_residuals(
 # ============================================================
 
 def _initial_guess(params: TwoCountryParams) -> np.ndarray:
-    """构造初值 log 向量——使用 ρ=0 解析解作为暖启动。"""
+    """构造初值 log 向量——使用 ρ=0 解析解作为暖启动。
+
+    关键：将 ρ=0 解归一化到 w=1（要素价格锚），使初始猜测
+    与残差函数的名义锚一致。同时调整产出水平满足要素市场约束。
+    """
     from .equilibrium_rho0 import solve_equilibrium_rho0
 
     Nl, M = params.Nl, params.M
@@ -192,10 +195,10 @@ def _initial_guess(params: TwoCountryParams) -> np.ndarray:
     guesses = []
     for i, cp in enumerate((params.home, params.foreign)):
         partner = params.foreign if i == 0 else params.home
-        # 用对方的 import_cost * 1.0 (初始价格) 作为进口价格估计
         imp_p = np.asarray(cp.import_cost, dtype=float)
 
         try:
+            gc = np.asarray(cp.gamma_cons, dtype=float) if cp.gamma_cons is not None else None
             rho0 = solve_equilibrium_rho0(
                 alpha=np.asarray(cp.alpha, dtype=float),
                 gamma=np.asarray(cp.gamma, dtype=float),
@@ -206,9 +209,25 @@ def _initial_guess(params: TwoCountryParams) -> np.ndarray:
                 L=np.asarray(cp.L, dtype=float),
                 Ml=int(cp.Ml),
                 M_factors=int(cp.M_factors),
+                gamma_cons=gc,
             )
             price = clamp_positive(rho0["price"])
             output = clamp_positive(rho0["output"])
+
+            # 归一化: 将价格缩放到 w=1（要素价格锚）
+            if M > 0:
+                w = price[Nl]
+                if w > EPS:
+                    price = price / w
+
+            # 缩放产出满足要素市场约束: Σ α_factor * P * Y = w * L
+            alpha_f = np.asarray(cp.alpha[:, Nl:], dtype=float)
+            factor_demand = (alpha_f * price[:Nl, None] * output[:, None]).sum()
+            factor_supply = float(np.dot(price[Nl:], cp.L))
+            if factor_demand > EPS:
+                scale = factor_supply / factor_demand
+                output = output * scale
+
         except Exception:
             price = np.ones(Nl + M, dtype=float)
             output = np.maximum(np.asarray(cp.A, dtype=float), 1.0)
@@ -350,9 +369,13 @@ def _solve_fallback(
             )
             output[:] = np.clip(0.7 * output + 0.3 * Y_prod, EPS, None)
 
-        # 名义锚
-        price_h[0] = 1.0
-        price_f[0] = 1.0
+        # 名义锚：要素价格 w=1
+        if M > 0:
+            price_h[Nl] = 1.0
+            price_f[Nl] = 1.0
+        else:
+            price_h[0] = 1.0
+            price_f[0] = 1.0
 
         x = _pack_vars(price_h, output_h, price_f, output_f)
         res_norm = float(np.linalg.norm(residual_fn(x)))

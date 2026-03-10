@@ -3,48 +3,74 @@ from __future__ import annotations
 import os
 import numpy as np
 
-from eco_simu import SimulationConfig, ConflictBlock, PolicyEvent, simulate
+from eco_simu import SimulationConfig, ConflictBlock, PolicyEvent, simulate, bootstrap_simulator
 from eco_simu import create_symmetric_parameters
+
+# 预热配置
+WARMUP_PERIODS = 1000  # 预热步数
+SIMULATION_PERIODS = 1000  # 主仿真步数
+SHOW_WARMUP = False  # 是否在图表中显示预热阶段（True: 显示全过程，False: 仅显示冲击后）
 
 
 def main():
-    # 配置：总期数1000，第500期开始提高两个部门关税20%
-    # 假设：对 Home 国的部门2与3（0基索引）加征20%；如需调整可修改下方映射。
-    # 互征关税（不同部门）：
-    # Home 对部门 2、3 加征 20%，Foreign 对部门 0、4 加征 20%
-    conflict = ConflictBlock(
-        export_controls={
-            "H": {1: 1}  # 0.8 表示对部门1出口限额为80%
-        },
-        import_tariffs={
-            "H": {2: 0, 3: 0},
-            "F": {0: 0, 4: 0},
-        },
-    )
-
-    # 事件时间线
-    events = [
-        # PolicyEvent(kind="import_tariff", actor="H", sectors={2: 0.2}, start_period=220),
-        # PolicyEvent(kind="import_tariff", actor="H", sectors={2: 0.4}, start_period=250),
-        # PolicyEvent(kind="export_quota", actor="H", sectors={2: 0.8}, start_period=300),
-        # PolicyEvent(kind="import_tariff", actor="H", sectors={2: 0.1}, start_period=500),
-        # # 示例：Home 对部门2征收 15% 出口税，从 t=350 到 t=480（事件翻译为 Foreign 的进口关税）
-        # PolicyEvent(kind="export_tariff", actor="H", sectors={2: 0.15}, start_period=350, end_period=480),
-    ]
-    config = SimulationConfig(
-        total_periods=1000,
-        conflict_start=200,
-        theta_price=0.05,
-        solver_max_iter=400,
-        solver_tol=1e-8,
-        events=events ,
-        conflict=conflict,
-    )
-
+    # ===== 1. 预热阶段 =====
+    print(f"=== 预热阶段 (显示预热: {SHOW_WARMUP}) ===")
     params = create_symmetric_parameters()
-    sim = simulate(config, params_raw=params)
+    sim = bootstrap_simulator(params_raw=params, theta_price=0.05)
+    
+    # 运行预热
+    for t in range(WARMUP_PERIODS):
+        sim.step()
+        if t % 100 == 0:
+            print(f"  预热步 {t}: H均价={sim.home_state.price.mean().item():.4f}")
+    
+    # 根据配置决定是否清除历史
+    if not SHOW_WARMUP:
+        # 清除预热历史，仅保留当前状态作为新起点
+        warmup_final_H = sim.home_state.detach()
+        warmup_final_F = sim.foreign_state.detach()
+        sim.history = {"H": [warmup_final_H], "F": [warmup_final_F]}
+        print(f"  预热完成，历史记录已清除 (SHOW_WARMUP=False)\n")
+    else:
+        print(f"  预热完成，保留历史记录 (SHOW_WARMUP=True)\n")
 
-    # 汇总并保存结果
+    # ===== 2. 冲击配置 =====
+    # 定义政策事件时间线（相对于主仿真开始的时刻）
+    # 格式: (触发时刻, 动作类型, 国家, 部门映射, 备注)
+    policy_timeline = [
+        # 示例1: t=0 时立即施加冲击（冲突开始）
+        (0, "import_tariff", "H", {2: 0.2, 3: 0.2}, "H对部门2/3加征20%关税"),
+    ]
+    
+    # ===== 3. 主仿真阶段（带政策事件） =====
+    print(f"=== 主仿真阶段 ({SIMULATION_PERIODS} 步) ===")
+    
+    # 将事件时间线转为字典便于查找
+    event_schedule = {}
+    for (trigger_t, action, actor, sectors, note) in policy_timeline:
+        event_schedule.setdefault(trigger_t, []).append((action, actor, sectors, note))
+    
+    for t in range(SIMULATION_PERIODS):
+        # 检查是否有事件需要在此时刻触发
+        if t in event_schedule:
+            for (action, actor, sectors, note) in event_schedule[t]:
+                if action == "import_tariff":
+                    sim.apply_import_tariff(actor, sectors, note=note)
+                    print(f"  [事件 t={t}] {note}")
+                elif action == "export_quota":
+                    sim.apply_export_control(actor, sectors, note=note)
+                    print(f"  [事件 t={t}] {note}")
+                elif action == "import_multiplier":
+                    sim.set_import_multiplier(actor, sectors, relative_to_baseline=True, note=note)
+                    print(f"  [事件 t={t}] {note}")
+        
+        # 执行仿真步
+        sim.step()
+        
+        if t % 100 == 0:
+            print(f"  仿真步 {t}: H收入={sim.home_state.income.item():.4f}")
+
+    # ===== 4. 汇总并保存结果 =====
     summary = sim.summarize_history()
     periods = np.arange(len(sim.history["H"]))
 
@@ -74,22 +100,49 @@ def main():
     save_country("H")
     save_country("F")
 
-    # 生成图表
+    # 生成图表（带政策事件标注）
     try:
-        # 仅调用 eco_simu 内的绘图方法；移除对已迁移模块的多余依赖
-        sim.plot_history(save_path=os.path.join(outdir, 'dynamic_history.png'), show=False)
+        from eco_simu.plotting import plot_history_with_events
+        
+        # 构建用于绘图的事件列表
+        plot_events = []
+        if policy_timeline:
+            for (trigger_t, action, actor, sectors, note) in policy_timeline:
+                # 如果保留预热历史，事件时间需要加上预热步数
+                display_t = trigger_t + WARMUP_PERIODS if SHOW_WARMUP else trigger_t
+                
+                sector_str = ",".join(f"{k}:{int(v*100)}%" for k, v in sectors.items())
+                plot_events.append({
+                    "t": display_t,
+                    "actor": actor,
+                    "action": f"{action.replace('_', ' ')} [{sector_str}]"
+                })
+        else:
+            # 无事件时也标注
+            t0 = WARMUP_PERIODS if SHOW_WARMUP else 0
+            plot_events.append({"t": t0, "actor": "H/F", "action": "No Policy Change"})
+        
+        plot_history_with_events(
+            sim, 
+            policy_events=plot_events,
+            save_path=os.path.join(outdir, 'history_with_events.png'), 
+            show=False,
+            title=f"Two-Country Simulation - Policy Events (Warmup={'Shown' if SHOW_WARMUP else 'Hidden'})"
+        )
+        
+        # 其他图表
         sim.plot_sector_paths('H', 'output', save_path=os.path.join(outdir, 'sector_output_H.png'), show=False, relative=True)
         sim.plot_sector_paths('F', 'output', save_path=os.path.join(outdir, 'sector_output_F.png'), show=False, relative=True)
-        sim.plot_sector_paths('H', 'price', save_path=os.path.join(outdir, 'sector_price_H.png'), show=False, relative=True)
-        sim.plot_sector_paths('F', 'price', save_path=os.path.join(outdir, 'sector_price_F.png'), show=False, relative=True)
         sim.plot_diagnostics(save_path=os.path.join(outdir, 'model_diagnostics.png'), show=False)
     except Exception as e:
         print(f"Plotting failed: {e}")
 
-    print("Simulation done: 1000 periods, conflict at t=500 (H:2&3 +20%, F:0&4 +20%)")
-    print(f"Home final income growth: {summary['H']['income_growth'][-1]:.2f}%")
-    print(f"Foreign final income growth: {summary['F']['income_growth'][-1]:.2f}%")
-    print("Outputs saved under results/: history_*.csv and PNG plots")
+    print(f"\n=== 仿真完成 ===")
+    print(f"  预热: {WARMUP_PERIODS} 步, 主仿真: {SIMULATION_PERIODS} 步")
+    print(f"  政策事件: {len(policy_timeline)} 个")
+    print(f"  Home 最终收入增长率: {summary['H']['income_growth'][-1]:.2f}%")
+    print(f"  Foreign 最终收入增长率: {summary['F']['income_growth'][-1]:.2f}%")
+    print(f"  结果已保存至: results/")
 
 
 if __name__ == "__main__":

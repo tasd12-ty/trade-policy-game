@@ -61,7 +61,7 @@ class ExperimentConfig:
     warmup_eps: float = 0.001  # 预热判定阈值（变化绝对值）
     warmup_max: int = 2000  # 预热最大步数
     require_stable_warmup: bool = True  # 预热不稳定时是否中止
-    theta_price: float = 0.05  # 价格调整系数 τ
+    theta_price: float = 1  # 价格调整系数 τ
     max_sectors_per_type: Optional[int] = None  # 每类政策最多作用的部门数限制
     recursion_limit: Optional[int] = None  # LangGraph 递归限制，None 自动估算
     fixed_import_multiplier: Optional[float] = None  # 若设定则锁定 import_multiplier（忽略智能体）

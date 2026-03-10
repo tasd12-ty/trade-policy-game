@@ -35,6 +35,24 @@ class TestTwoCountrySimulator:
         new_ic = sim.params.home.import_cost
         assert new_ic[2] > old_ic[2]
 
+    def test_apply_tariff_sets_level_not_increment(self, sim):
+        """同一税率重复施加不应累乘；更新税率应覆盖到新水平。"""
+        base_ic = sim.params.home.import_cost.copy()
+
+        sim.apply_tariff("H", {2: 0.3})
+        ic_1 = sim.params.home.import_cost.copy()
+        assert ic_1[2] == pytest.approx(base_ic[2] * 1.3)
+
+        # 重复施加相同税率：保持同一水平
+        sim.apply_tariff("H", {2: 0.3})
+        ic_2 = sim.params.home.import_cost.copy()
+        assert ic_2[2] == pytest.approx(ic_1[2])
+
+        # 覆盖为新税率水平
+        sim.apply_tariff("H", {2: 0.1})
+        ic_3 = sim.params.home.import_cost.copy()
+        assert ic_3[2] == pytest.approx(base_ic[2] * 1.1)
+
     def test_fork_isolation(self, sim):
         sim.run(10)
         forked = sim.fork()
@@ -53,6 +71,7 @@ class TestTwoCountrySimulator:
         assert "income" in obs
         assert "price" in obs
         assert "trade_balance" in obs
+        assert "opponent_import_cost" in obs
         assert obs["country"] == "H"
 
     def test_payoff_computation(self, sim):

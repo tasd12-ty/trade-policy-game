@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code
+.claude/
+
+# LaTeX
+missfont.log
+*.aux
+*.log
+*.out
+*.synctex.gz
+
+# Results (large output files)
+results/
+results_grad/
+results_llm/
+tmp_review_grad/
+tmp_review_grad_nan/
+tmp_review_llm/
+tmp_review_llm_nan/
